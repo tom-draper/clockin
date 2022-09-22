@@ -18,7 +18,7 @@ const (
 )
 
 func dsn(dbName string) string {
-	return fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, hostname, dbName)
+	return fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true", username, password, hostname, dbName)
 }
 
 func rowsAffected(res sql.Result) (int64, error) {
@@ -117,12 +117,34 @@ func startRecording(db *sql.DB) error {
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
 	if err != nil {
-		log.Printf("Error when preparing SQL statement: %s", err)
+		log.Printf("Error when preparing SQL insert statement: %s", err)
 		return err
 	}
 	defer stmt.Close()
 
-	res, err := stmt.ExecContext(ctx, "test", time.Now(), nil)
+	res, err := stmt.ExecContext(ctx, "test", time.Now().UTC(), nil)
+	if err != nil {
+		log.Printf("Error when inserting row into products table: %s", err)
+		return err
+	}
+
+	rowsAffected(res)
+
+	return nil
+}
+
+func finishRecording(db *sql.DB) error {
+	query := "UPDATE clockin set finish=? where finish is NULL"
+	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelfunc()
+	stmt, err := db.PrepareContext(ctx, query)
+	if err != nil {
+		log.Printf("Error when preparing SQL update statement: %s", err)
+		return err
+	}
+	defer stmt.Close()
+
+	res, err := stmt.ExecContext(ctx, time.Now().UTC())
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s", err)
 		return err
@@ -158,7 +180,7 @@ func main() {
 	}
 	defer db.Close()
 
-	reset(db)
+	// reset(db)
 	err = createTable(db)
 	if err != nil {
 		log.Printf("Create table failed with error: %s", err)
@@ -168,6 +190,11 @@ func main() {
 	err = startRecording(db)
 	if err != nil {
 		log.Printf("Start recording failed with error: %s", err)
+		return
+	}
+	err = finishRecording(db)
+	if err != nil {
+		log.Printf("Finish recording failed with error: %s", err)
 		return
 	}
 
