@@ -88,7 +88,7 @@ func showTable(db *sql.DB) error {
 
 	for res.Next() {
 		var session Session
-		res.Scan(session.id, session.name, session.start, session.finish)
+		res.Scan(&session.id, &session.name, &session.start, &session.finish)
 		log.Printf("%d %s %s %s", session.id, session.name, session.start, session.finish)
 	}
 
@@ -118,7 +118,12 @@ func startRecording(db *sql.DB, name string) error {
 }
 
 func finishRecording(db *sql.DB, name string) error {
-	query := "UPDATE clockin set finish=? WHERE finish is NULL AND name=?"
+	var query string
+	if name == "all" {
+		query = "UPDATE clockin set finish=? WHERE finish is NULL"
+	} else {
+		query = "UPDATE clockin set finish=? WHERE finish is NULL AND name=?"
+	}
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -128,7 +133,12 @@ func finishRecording(db *sql.DB, name string) error {
 	}
 	defer stmt.Close()
 
-	res, err := stmt.ExecContext(ctx, time.Now().UTC(), name)
+	var res sql.Result
+	if name == "all" {
+		res, err = stmt.ExecContext(ctx, time.Now().UTC())
+	} else {
+		res, err = stmt.ExecContext(ctx, time.Now().UTC(), name)
+	}
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s", err)
 		return err
@@ -148,11 +158,17 @@ func getSessions(db *sql.DB, start time.Time, end time.Time) ([]Session, error) 
 	var sessions []Session
 	for res.Next() {
 		var session Session
-		res.Scan(session.id, session.name, session.start, session.finish)
+		res.Scan(&session.id, &session.name, &session.start, &session.finish)
 		log.Printf("%d %s %s %s", session.id, session.name, session.start, session.finish)
 	}
 
 	return sessions, nil
+}
+
+func getSessionsToday(db *sql.DB) ([]Session, error) {
+	now := time.Now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return getSessions(db, dayStart, now)
 }
 
 func getSessionsDay(db *sql.DB) ([]Session, error) {
@@ -175,14 +191,41 @@ func getSessionsYear(db *sql.DB) ([]Session, error) {
 	return getSessions(db, now.Add(-time.Hour*24*365), now)
 }
 
+func totalDuration(sessions []Session) time.Duration {
+	var totalDuration time.Duration
+	for _, session := range sessions {
+		duration := session.start.Sub(session.finish)
+		totalDuration += duration
+	}
+	return totalDuration
+}
+
+func displaySessionsStats(sessions []Session) error {
+	duration := totalDuration(sessions)
+	log.Println(duration)
+	return nil
+}
+
 func displayStats(db *sql.DB, time string) error {
+	var sessions []Session
+	var err error
 	switch time {
 	case "today":
+		sessions, err = getSessionsToday(db)
 	case "day":
+		sessions, err = getSessionsDay(db)
 	case "week":
+		sessions, err = getSessionsWeek(db)
 	case "month":
+		sessions, err = getSessionsMonth(db)
 	case "year":
+		sessions, err = getSessionsYear(db)
 	}
+	if err != nil {
+		log.Printf("Sessions in time range failed with error: %s", err)
+		return err
+	}
+	displaySessionsStats(sessions)
 	return nil
 }
 
@@ -211,7 +254,6 @@ type Session struct {
 }
 
 func currentSessions(db *sql.DB) ([]Session, error) {
-	var session Session
 	res, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
 	if err != nil {
 		log.Printf("Current sessions failed with error: %s", err)
@@ -220,6 +262,7 @@ func currentSessions(db *sql.DB) ([]Session, error) {
 
 	var sessions []Session
 	for res.Next() {
+		var session Session
 		res.Scan(&session.id, &session.name, &session.start, &session.finish)
 		sessions = append(sessions, session)
 	}
