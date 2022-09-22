@@ -27,7 +27,7 @@ func dsn(dbName string) string {
 func rowsAffected(res sql.Result) (int64, error) {
 	rows, err := res.RowsAffected()
 	if err != nil {
-		log.Printf("Error when getting rows affected: %s", err)
+		log.Printf("Error when getting rows affected: %s\n", err)
 		return 0, err
 	}
 	log.Printf("Rows affected: %d", rows)
@@ -37,7 +37,7 @@ func rowsAffected(res sql.Result) (int64, error) {
 func dbConnection() (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn(""))
 	if err != nil {
-		log.Printf("Error when opening database: %s", err)
+		log.Printf("Error when opening database: %s\n", err)
 		return nil, err
 	}
 
@@ -45,7 +45,7 @@ func dbConnection() (*sql.DB, error) {
 	defer cancelfunc()
 	_, err = db.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS "+dbname)
 	if err != nil {
-		log.Printf("Error when creating database: %s", err)
+		log.Printf("Error when creating database: %s\n", err)
 		return nil, err
 	}
 
@@ -54,7 +54,7 @@ func dbConnection() (*sql.DB, error) {
 	db.Close()
 	db, err = sql.Open("mysql", dsn(dbname))
 	if err != nil {
-		log.Printf("Error when opening database: %s", err)
+		log.Printf("Error when opening database: %s\n", err)
 		return nil, err
 	}
 
@@ -73,7 +73,7 @@ func createTable(db *sql.DB) error {
 
 	_, err := db.ExecContext(ctx, query)
 	if err != nil {
-		log.Printf("Error when creating table: %s", err)
+		log.Printf("Error when creating table: %s\n", err)
 		return err
 	}
 
@@ -90,7 +90,11 @@ func showTable(db *sql.DB) error {
 	for res.Next() {
 		var session Session
 		res.Scan(&session.id, &session.name, &session.start, &session.finish)
-		log.Printf("%d %s %s %s", session.id, session.name, session.start, session.finish)
+		name := session.name
+		if session.name == "" {
+			name = "none"
+		}
+		fmt.Printf("%d %s %s %s\n", session.id, name, session.start, session.finish)
 	}
 
 	return nil
@@ -102,19 +106,19 @@ func startRecording(db *sql.DB, name string) error {
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
 	if err != nil {
-		log.Printf("Error when preparing SQL insert statement: %s", err)
+		log.Printf("Error when preparing SQL insert statement: %s\n", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.ExecContext(ctx, name, time.Now().UTC(), nil)
 	if err != nil {
-		log.Printf("Error when inserting row into products table: %s", err)
+		log.Printf("Error when inserting row into products table: %s\n", err)
 		return err
 	}
 
 	// rowsAffected(res)
-
+	fmt.Println("Recording started")
 	return nil
 }
 
@@ -129,23 +133,32 @@ func finishRecording(db *sql.DB, name string) error {
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
 	if err != nil {
-		log.Printf("Error when preparing SQL update statement: %s", err)
+		log.Printf("Error when preparing SQL update statement: %s\n", err)
 		return err
 	}
 	defer stmt.Close()
 
-	// var res sql.Result
+	var res sql.Result
 	if name == "all" {
-		_, err = stmt.ExecContext(ctx, time.Now().UTC())
+		res, err = stmt.ExecContext(ctx, time.Now().UTC())
 	} else {
-		_, err = stmt.ExecContext(ctx, time.Now().UTC(), name)
+		res, err = stmt.ExecContext(ctx, time.Now().UTC(), name)
 	}
 	if err != nil {
-		log.Printf("Error when inserting row into products table: %s", err)
+		log.Printf("Error when inserting row into products table: %s\n", err)
 		return err
 	}
 
-	// rowsAffected(res)
+	n, err := rowsAffected(res)
+	if err != nil {
+		log.Printf("Error when finding rows affected: %s\n", err)
+		return err
+	}
+	if n > 1 {
+		fmt.Printf("Recording stopped for %d sessions\n", n)
+	} else {
+		fmt.Printf("Recording stopped\n")
+	}
 
 	return nil
 }
@@ -247,7 +260,7 @@ func displayStats(db *sql.DB, time string) error {
 		sessions, err = getSessionsYear(db)
 	}
 	if err != nil {
-		log.Printf("Sessions in time range failed with error: %s", err)
+		log.Printf("Sessions in time range failed with error: %s\n", err)
 		return err
 	}
 	duration := totalDuration(sessions)
@@ -258,14 +271,14 @@ func displayStats(db *sql.DB, time string) error {
 func reset(db *sql.DB) error {
 	stmt, err := db.Prepare("DROP TABLE IF EXISTS " + dbname)
 	if err != nil {
-		log.Printf("Error when preparing to drop table: %s", err)
+		log.Printf("Error when preparing to drop table: %s\n", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec()
 	if err != nil {
-		log.Printf("Error when dropping table: %s", err)
+		log.Printf("Error when dropping table: %s\n", err)
 		return nil
 	}
 
@@ -282,7 +295,7 @@ type Session struct {
 func currentSessions(db *sql.DB) ([]Session, error) {
 	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
 	if err != nil {
-		log.Printf("Current sessions failed with error: %s", err)
+		log.Printf("Current sessions failed with error: %s\n", err)
 		return nil, err
 	}
 
@@ -335,14 +348,14 @@ func getAdditionalOption() string {
 func main() {
 	db, err := dbConnection()
 	if err != nil {
-		log.Printf("Error when getting database connection: %s", err)
+		log.Printf("Error when getting database connection: %s\n", err)
 		return
 	}
 	defer db.Close()
 
 	err = createTable(db)
 	if err != nil {
-		log.Printf("Create table failed with error: %s", err)
+		log.Printf("Create table failed with error: %s\n", err)
 		return
 	}
 
@@ -353,33 +366,33 @@ func main() {
 		name := getAdditionalOption()
 		err := startRecording(db, name)
 		if err != nil {
-			log.Printf("Start recording failed with error: %s", err)
+			log.Printf("Start recording failed with error: %s\n", err)
 			return
 		}
 	case "finish", "finished", "end", "stop", "halt":
 		name := getAdditionalOption()
 		err := finishRecording(db, name)
 		if err != nil {
-			log.Printf("Finish recording failed with error: %s", err)
+			log.Printf("Finish recording failed with error: %s\n", err)
 			return
 		}
 	case "reset":
 		err := reset(db)
 		if err != nil {
-			log.Printf("Data reset failed with error: %s", err)
+			log.Printf("Data reset failed with error: %s\n", err)
 			return
 		}
 	case "status", "info", "running":
 		err := status(db)
 		if err != nil {
-			log.Printf("Data reset failed with error: %s", err)
+			log.Printf("Data reset failed with error: %s\n", err)
 			return
 		}
 	case "stats", "statistics":
 		time := getAdditionalOption()
 		err := displayStats(db, time)
 		if err != nil {
-			log.Printf("Display stats failed with error: %s", err)
+			log.Printf("Display stats failed with error: %s\n", err)
 			return
 		}
 	}

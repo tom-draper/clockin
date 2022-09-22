@@ -27,13 +27,13 @@ Run the executable with:
 
 ### Starting a work session
 
-To record a new work session, run:
+To start recording a new work session, run:
 
 ```bash
 clockin start
 ```
 
-With multiple work sessions running at once, you can keep track of them with a name:
+With multiple work sessions running at once, you can keep track of them by providing a name identifier:
 
 ```bash
 clockin start homework
@@ -41,13 +41,13 @@ clockin start homework
 
 ### Finishing a work session
 
-To finish a running work session, run:
+To finish recording a work session, run:
 
 ```bash
 clockin stop
 ```
 
-With multiple work sessions running at once, you can specify your work session with its name identifier:
+With multiple work sessions running at once, you can specify a work session with its name identifier:
 
 ```bash
 clockin stop homework
@@ -59,9 +59,9 @@ To stop all current running work sessions, run:
 clockin stop all
 ```
 
-### Check for running session
+### Show running sessions
 
-To check if a session is currently running, run:
+To list currently running work sessions, run:
 
 ```bash
 clockin status
