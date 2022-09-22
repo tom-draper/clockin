@@ -43,13 +43,13 @@ func dbConnection() (*sql.DB, error) {
 
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
-	res, err := db.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS "+dbname)
+	_, err = db.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS "+dbname)
 	if err != nil {
 		log.Printf("Error when creating database: %s", err)
 		return nil, err
 	}
 
-	rowsAffected(res)
+	// rowsAffected(res)
 
 	db.Close()
 	db, err = sql.Open("mysql", dsn(dbname))
@@ -62,7 +62,7 @@ func dbConnection() (*sql.DB, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(time.Minute * 5)
 
-	log.Printf("Connection established")
+	// log.Printf("Connection established")
 	return db, nil
 }
 
@@ -86,6 +86,7 @@ func showTable(db *sql.DB) error {
 		return err
 	}
 
+	// log.Println("\n\nTable:")
 	for res.Next() {
 		var session Session
 		res.Scan(&session.id, &session.name, &session.start, &session.finish)
@@ -106,13 +107,13 @@ func startRecording(db *sql.DB, name string) error {
 	}
 	defer stmt.Close()
 
-	res, err := stmt.ExecContext(ctx, name, time.Now().UTC(), nil)
+	_, err = stmt.ExecContext(ctx, name, time.Now().UTC(), nil)
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s", err)
 		return err
 	}
 
-	rowsAffected(res)
+	// rowsAffected(res)
 
 	return nil
 }
@@ -133,18 +134,18 @@ func finishRecording(db *sql.DB, name string) error {
 	}
 	defer stmt.Close()
 
-	var res sql.Result
+	// var res sql.Result
 	if name == "all" {
-		res, err = stmt.ExecContext(ctx, time.Now().UTC())
+		_, err = stmt.ExecContext(ctx, time.Now().UTC())
 	} else {
-		res, err = stmt.ExecContext(ctx, time.Now().UTC(), name)
+		_, err = stmt.ExecContext(ctx, time.Now().UTC(), name)
 	}
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s", err)
 		return err
 	}
 
-	rowsAffected(res)
+	// rowsAffected(res)
 
 	return nil
 }
@@ -154,7 +155,7 @@ func extractSessions(rows *sql.Rows) []Session {
 	for rows.Next() {
 		var session Session
 		rows.Scan(&session.id, &session.name, &session.start, &session.finish)
-		log.Printf("Session %d %s %s %s", session.id, session.name, session.start, session.finish)
+		// log.Printf("%d %s %s %s", session.id, session.name, session.start, session.finish)
 		sessions = append(sessions, session)
 	}
 	return sessions
@@ -219,11 +220,11 @@ func totalDuration(sessions []Session) time.Duration {
 	return totalDuration
 }
 
-func displaySessionsStats(sessions []Session) error {
-	duration := totalDuration(sessions)
-	log.Println("Duration:", duration)
-	return nil
-}
+// func displaySessionsStats(sessions []Session) error {
+// 	duration := totalDuration(sessions)
+// 	log.Println("Duration:", color.Ize(color.Green, duration.String()))
+// 	return nil
+// }
 
 func displayStats(db *sql.DB, time string) error {
 	var sessions []Session
@@ -249,7 +250,8 @@ func displayStats(db *sql.DB, time string) error {
 		log.Printf("Sessions in time range failed with error: %s", err)
 		return err
 	}
-	displaySessionsStats(sessions)
+	duration := totalDuration(sessions)
+	fmt.Println("Total duration:", color.Ize(color.Green, durafmt.Parse(duration).LimitFirstN(2).String()))
 	return nil
 }
 
@@ -285,7 +287,6 @@ func currentSessions(db *sql.DB) ([]Session, error) {
 	}
 
 	sessions := extractSessions(rows)
-
 	return sessions, nil
 }
 
@@ -348,14 +349,14 @@ func main() {
 	command := getCommand()
 
 	switch command {
-	case "start", "starting":
+	case "start", "starting", "go":
 		name := getAdditionalOption()
 		err := startRecording(db, name)
 		if err != nil {
 			log.Printf("Start recording failed with error: %s", err)
 			return
 		}
-	case "finish", "finished", "end":
+	case "finish", "finished", "end", "stop", "halt":
 		name := getAdditionalOption()
 		err := finishRecording(db, name)
 		if err != nil {

@@ -44,12 +44,22 @@ clockin start homework
 To finish a running work session, run:
 
 ```bash
-clockin finish
+clockin stop
 ```
 
-With multiple work sessions running at once, you can specify your work session with its unique:
+With multiple work sessions running at once, you can specify your work session with its name identifier:
 
-### Check for running sesssion
+```bash
+clockin stop homework
+```
+
+To stop all current running work sessions, run:
+
+```bash
+clockin stop all
+```
+
+### Check for running session
 
 To check if a session is currently running, run:
 
@@ -73,22 +83,14 @@ A status summary can be displayed by running:
 clockin stats
 ```
 
-To view statistics for the current day, run:
+A time period can be specified.
 
 ```bash
-clockin stats --today
-```
-
-To view statistics for the last month, run:
-
-```bash
-clockin stats --month
-```
-
-To view statistics for the last year, run:
-
-```bash
-clockin stats --year
+clockin stats today
+clockin stats day
+clockin stats week
+clockin stats month
+clockin stats year
 ```
 
 ### Config
