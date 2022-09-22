@@ -31,13 +31,21 @@ To record a new work session, run:
 clockin start
 ```
 
+With multiple work sessions running at once, you can keep track of them with a name:
+
+```bash
+clockin start homework
+```
+
 ### Finishing a work session
 
 To finish a running work session, run:
 
 ```bash
-clockin finishing
+clockin finish
 ```
+
+With multiple work sessions running at once, you can specify your work session with its unique:
 
 ### Check for running sesssion
 

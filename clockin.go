@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -71,7 +72,7 @@ func dbConnection() (*sql.DB, error) {
 }
 
 func createTable(db *sql.DB) error {
-	query := `CREATE TABLE IF NOT EXISTS clockin(id int primary key auto_increment, name varchar(100) default NULL, start datetime default CURRENT_TIMESTAMP, finish datetime)`
+	query := `CREATE TABLE IF NOT EXISTS clockin(id int primary key auto_increment, name varchar(100), start datetime default CURRENT_TIMESTAMP, finish datetime)`
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 
@@ -111,7 +112,7 @@ func currentWorkingID(db *sql.DB) (int64, error) {
 	return id, nil
 }
 
-func startRecording(db *sql.DB) error {
+func startRecording(db *sql.DB, name string) error {
 	query := "INSERT INTO clockin(name, start, finish) VALUES (?, ?, ?)"
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
@@ -122,7 +123,7 @@ func startRecording(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	res, err := stmt.ExecContext(ctx, "test", time.Now().UTC(), nil)
+	res, err := stmt.ExecContext(ctx, name, time.Now().UTC(), nil)
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s", err)
 		return err
@@ -133,8 +134,13 @@ func startRecording(db *sql.DB) error {
 	return nil
 }
 
-func finishRecording(db *sql.DB) error {
-	query := "UPDATE clockin set finish=? where finish is NULL"
+func finishRecording(db *sql.DB, name string) error {
+	var query string
+	if name == "" {
+		query = "UPDATE clockin set finish=? WHERE finish is NULL"
+	} else {
+		query = "UPDATE clockin set finish=? WHERE finish is NULL AND name=?"
+	}
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -144,7 +150,12 @@ func finishRecording(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	res, err := stmt.ExecContext(ctx, time.Now().UTC())
+	var res sql.Result
+	if name == "" {
+		res, err = stmt.ExecContext(ctx, time.Now().UTC())
+	} else {
+		res, err = stmt.ExecContext(ctx, time.Now().UTC(), name)
+	}
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s", err)
 		return err
@@ -180,6 +191,29 @@ func main() {
 	}
 	defer db.Close()
 
+	var command string
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+
+	switch command {
+	case "start":
+		log.Printf("Start")
+		var name string
+		if len(os.Args) > 2 {
+			name = os.Args[2]
+		}
+		startRecording(db, name)
+	case "finish":
+		var name string
+		if len(os.Args) > 2 {
+			name = os.Args[2]
+		}
+		finishRecording(db, name)
+	case "reset":
+		reset(db)
+	}
+
 	// reset(db)
 	err = createTable(db)
 	if err != nil {
@@ -187,12 +221,12 @@ func main() {
 		return
 	}
 
-	err = startRecording(db)
+	err = startRecording(db, "")
 	if err != nil {
 		log.Printf("Start recording failed with error: %s", err)
 		return
 	}
-	err = finishRecording(db)
+	err = finishRecording(db, "")
 	if err != nil {
 		log.Printf("Finish recording failed with error: %s", err)
 		return
