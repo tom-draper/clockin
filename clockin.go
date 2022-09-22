@@ -62,14 +62,6 @@ func dbConnection() (*sql.DB, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(time.Minute * 5)
 
-	// ctx, cancelfunc = context.WithTimeout(context.Background(), 5*time.Second)
-	// defer cancelfunc()
-	// err = db.PingContext(ctx)
-	// if err != nil {
-	// 	log.Printf("Errors pinging database: %s", err)
-	// 	return nil, err
-	// }
-
 	log.Printf("Connection established")
 	return db, nil
 }
@@ -95,12 +87,9 @@ func showTable(db *sql.DB) error {
 	}
 
 	for res.Next() {
-		var id int
-		var name string
-		var start time.Time
-		var finish time.Time
-		res.Scan(&id, &name, &start, &finish)
-		log.Printf("%d %s %s %s", id, name, start, finish)
+		var session Session
+		res.Scan(session.id, session.name, session.start, session.finish)
+		log.Printf("%d %s %s %s", session.id, session.name, session.start, session.finish)
 	}
 
 	return nil
@@ -129,12 +118,7 @@ func startRecording(db *sql.DB, name string) error {
 }
 
 func finishRecording(db *sql.DB, name string) error {
-	var query string
-	if name == "" {
-		query = "UPDATE clockin set finish=? WHERE finish is NULL"
-	} else {
-		query = "UPDATE clockin set finish=? WHERE finish is NULL AND name=?"
-	}
+	query := "UPDATE clockin set finish=? WHERE finish is NULL AND name=?"
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -144,12 +128,7 @@ func finishRecording(db *sql.DB, name string) error {
 	}
 	defer stmt.Close()
 
-	var res sql.Result
-	if name == "" {
-		res, err = stmt.ExecContext(ctx, time.Now().UTC())
-	} else {
-		res, err = stmt.ExecContext(ctx, time.Now().UTC(), name)
-	}
+	res, err := stmt.ExecContext(ctx, time.Now().UTC(), name)
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s", err)
 		return err
@@ -160,9 +139,47 @@ func finishRecording(db *sql.DB, name string) error {
 	return nil
 }
 
+func getSessions(db *sql.DB, start time.Time, end time.Time) ([]Session, error) {
+	res, err := db.Query(fmt.Sprintf("SELECT * FROM clockin start between %s and %s", start, end))
+	if err != nil {
+		return nil, err
+	}
+
+	var sessions []Session
+	for res.Next() {
+		var session Session
+		res.Scan(session.id, session.name, session.start, session.finish)
+		log.Printf("%d %s %s %s", session.id, session.name, session.start, session.finish)
+	}
+
+	return sessions, nil
+}
+
+func getSessionsDay(db *sql.DB) ([]Session, error) {
+	now := time.Now()
+	return getSessions(db, now.Add(-time.Hour*24), now)
+}
+
+func getSessionsWeek(db *sql.DB) ([]Session, error) {
+	now := time.Now()
+	return getSessions(db, now.Add(-time.Hour*24*7), now)
+}
+
+func getSessionsMonth(db *sql.DB) ([]Session, error) {
+	now := time.Now()
+	return getSessions(db, now.Add(-time.Hour*24*30), now)
+}
+
+func getSessionsYear(db *sql.DB) ([]Session, error) {
+	now := time.Now()
+	return getSessions(db, now.Add(-time.Hour*24*365), now)
+}
+
 func displayStats(db *sql.DB, time string) error {
 	switch time {
-	case "day", "today":
+	case "today":
+	case "day":
+	case "week":
 	case "month":
 	case "year":
 	}
