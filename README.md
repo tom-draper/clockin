@@ -2,6 +2,12 @@
 
 ## Getting Started
 
+### MySQL
+
+MySQL is a dependency for this software. If MySQL is not installed on your machine, download it from the <a href="https://dev.mysql.com/downloads/mysql/">MySQL website</a>.
+
+### Build
+
 Compile the program on your machine with:
 
 ```bash
