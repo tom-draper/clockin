@@ -41,6 +41,14 @@ To check if a session is currently running, run:
 clockin status
 ```
 
+### Reset data
+
+To delete all stored data, run:
+
+```bash
+clockin reset
+```
+
 ### Statistics
 
 A status summary can be displayed by running:
