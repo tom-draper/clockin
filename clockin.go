@@ -8,7 +8,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/TwiN/go-color"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/hako/durafmt"
 )
 
 const (
@@ -60,13 +62,14 @@ func dbConnection() (*sql.DB, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(time.Minute * 5)
 
-	ctx, cancelfunc = context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelfunc()
-	err = db.PingContext(ctx)
-	if err != nil {
-		log.Printf("Errors pinging database: %s", err)
-		return nil, err
-	}
+	// ctx, cancelfunc = context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancelfunc()
+	// err = db.PingContext(ctx)
+	// if err != nil {
+	// 	log.Printf("Errors pinging database: %s", err)
+	// 	return nil, err
+	// }
+
 	log.Printf("Connection established")
 	return db, nil
 }
@@ -92,7 +95,7 @@ func showTable(db *sql.DB) error {
 	}
 
 	for res.Next() {
-		var id int64
+		var id int
 		var name string
 		var start time.Time
 		var finish time.Time
@@ -101,15 +104,6 @@ func showTable(db *sql.DB) error {
 	}
 
 	return nil
-}
-
-func currentWorkingID(db *sql.DB) (int64, error) {
-	var id int64
-	err := db.QueryRow("SELECT id FROM clockin WHERE finish IS NULL").Scan(&id)
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
 }
 
 func startRecording(db *sql.DB, name string) error {
@@ -166,6 +160,15 @@ func finishRecording(db *sql.DB, name string) error {
 	return nil
 }
 
+func displayStats(db *sql.DB, time string) error {
+	switch time {
+	case "day", "today":
+	case "month":
+	case "year":
+	}
+	return nil
+}
+
 func reset(db *sql.DB) error {
 	stmt, err := db.Prepare("DROP TABLE IF EXISTS " + dbname)
 	if err != nil {
@@ -183,6 +186,71 @@ func reset(db *sql.DB) error {
 	return nil
 }
 
+type Session struct {
+	id     int
+	name   string
+	start  time.Time
+	finish time.Time
+}
+
+func currentSessions(db *sql.DB) ([]Session, error) {
+	var session Session
+	res, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
+	if err != nil {
+		log.Printf("Current sessions failed with error: %s", err)
+		return nil, err
+	}
+
+	var sessions []Session
+	for res.Next() {
+		res.Scan(&session.id, &session.name, &session.start, &session.finish)
+		sessions = append(sessions, session)
+	}
+	return sessions, nil
+}
+
+func printCurrentSession(session Session) {
+	duration := color.Ize(color.Green, durafmt.Parse(time.Since(session.start)).LimitFirstN(2).String())
+
+	if session.name == "" {
+		fmt.Printf("[%d] running for %s\n", session.id, duration)
+	} else {
+		fmt.Printf("[%d - %s] running for %s\n", session.id, session.name, duration)
+	}
+}
+
+func status(db *sql.DB) error {
+	sessions, err := currentSessions(db)
+	if err != nil {
+		return err
+	}
+
+	if len(sessions) == 0 {
+		fmt.Println("No sessions currently running.")
+	} else {
+		for _, session := range sessions {
+			printCurrentSession(session)
+		}
+	}
+	return nil
+}
+
+func getCommand() string {
+	var command string
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+	return command
+}
+
+func getAdditionalOption() string {
+	var option string
+	if len(os.Args) > 2 {
+		option = os.Args[2]
+	}
+	return option
+}
+
 func main() {
 	db, err := dbConnection()
 	if err != nil {
@@ -191,53 +259,49 @@ func main() {
 	}
 	defer db.Close()
 
-	var command string
-	if len(os.Args) > 1 {
-		command = os.Args[1]
-	}
-
-	switch command {
-	case "start":
-		log.Printf("Start")
-		var name string
-		if len(os.Args) > 2 {
-			name = os.Args[2]
-		}
-		startRecording(db, name)
-	case "finish":
-		var name string
-		if len(os.Args) > 2 {
-			name = os.Args[2]
-		}
-		finishRecording(db, name)
-	case "reset":
-		reset(db)
-	}
-
-	// reset(db)
 	err = createTable(db)
 	if err != nil {
 		log.Printf("Create table failed with error: %s", err)
 		return
 	}
 
-	err = startRecording(db, "")
-	if err != nil {
-		log.Printf("Start recording failed with error: %s", err)
-		return
-	}
-	err = finishRecording(db, "")
-	if err != nil {
-		log.Printf("Finish recording failed with error: %s", err)
-		return
+	command := getCommand()
+
+	switch command {
+	case "start", "starting":
+		name := getAdditionalOption()
+		err := startRecording(db, name)
+		if err != nil {
+			log.Printf("Start recording failed with error: %s", err)
+			return
+		}
+	case "finish", "finished", "end":
+		name := getAdditionalOption()
+		err := finishRecording(db, name)
+		if err != nil {
+			log.Printf("Finish recording failed with error: %s", err)
+			return
+		}
+	case "reset":
+		err := reset(db)
+		if err != nil {
+			log.Printf("Data reset failed with error: %s", err)
+			return
+		}
+	case "status", "info":
+		err := status(db)
+		if err != nil {
+			log.Printf("Data reset failed with error: %s", err)
+			return
+		}
+	case "stats", "statistics":
+		time := getAdditionalOption()
+		err := displayStats(db, time)
+		if err != nil {
+			log.Printf("Display stats failed with error: %s", err)
+			return
+		}
 	}
 
 	showTable(db)
-
-	id, err := currentWorkingID(db)
-	if err != nil {
-		log.Printf("Getting current working ID failed with error: %s", err)
-		return
-	}
-	log.Printf("Current working ID: %d", id)
 }

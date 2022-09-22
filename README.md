@@ -1,10 +1,12 @@
 # Clock In (In-Progress)
 
+Clock In is a command-line tool that allows you to track your working periods. Start and stop the timer with two simple commands and view stats and trends and earn awards for good behaviour!.
+
 ## Getting Started
 
 ### MySQL
 
-MySQL is a dependency for this software. If MySQL is not installed on your machine, download it from the <a href="https://dev.mysql.com/downloads/mysql/">MySQL website</a>.
+If MySQL is not installed on your machine, download it from the <a href="https://dev.mysql.com/downloads/mysql/">MySQL website</a>. During setup, ensure you note your username and password and copy them into the .env file.
 
 ### Build
 
