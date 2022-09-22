@@ -150,7 +150,7 @@ func finishRecording(db *sql.DB, name string) error {
 }
 
 func getSessions(db *sql.DB, start time.Time, end time.Time) ([]Session, error) {
-	res, err := db.Query(fmt.Sprintf("SELECT * FROM clockin start between %s and %s", start, end))
+	res, err := db.Query(fmt.Sprintf("SELECT * FROM clockin WHERE start BETWEEN %s AND %s", start.Format("2006-01-02"), end.Format("2006-01-02")))
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func getSessions(db *sql.DB, start time.Time, end time.Time) ([]Session, error) 
 	for res.Next() {
 		var session Session
 		res.Scan(&session.id, &session.name, &session.start, &session.finish)
-		log.Printf("%d %s %s %s", session.id, session.name, session.start, session.finish)
+		log.Printf("Session %d %s %s %s", session.id, session.name, session.start, session.finish)
 	}
 
 	return sessions, nil
@@ -211,14 +211,19 @@ func displayStats(db *sql.DB, time string) error {
 	var err error
 	switch time {
 	case "today":
+		fmt.Println("Sessions from today:")
 		sessions, err = getSessionsToday(db)
 	case "day":
+		fmt.Println("Sessions from last 24hrs:")
 		sessions, err = getSessionsDay(db)
 	case "week":
+		fmt.Println("Sessions from last week:")
 		sessions, err = getSessionsWeek(db)
 	case "month":
+		fmt.Println("Sessions from last month:")
 		sessions, err = getSessionsMonth(db)
 	case "year":
+		fmt.Println("Sessions from last year:")
 		sessions, err = getSessionsYear(db)
 	}
 	if err != nil {
@@ -348,7 +353,7 @@ func main() {
 			log.Printf("Data reset failed with error: %s", err)
 			return
 		}
-	case "status", "info":
+	case "status", "info", "running":
 		err := status(db)
 		if err != nil {
 			log.Printf("Data reset failed with error: %s", err)
