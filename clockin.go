@@ -149,52 +149,71 @@ func finishRecording(db *sql.DB, name string) error {
 	return nil
 }
 
-func getSessions(db *sql.DB, start time.Time, end time.Time) ([]Session, error) {
-	res, err := db.Query(fmt.Sprintf("SELECT * FROM clockin WHERE start BETWEEN %s AND %s", start.Format("2006-01-02"), end.Format("2006-01-02")))
+func extractSessions(rows *sql.Rows) []Session {
+	var sessions []Session
+	for rows.Next() {
+		var session Session
+		rows.Scan(&session.id, &session.name, &session.start, &session.finish)
+		log.Printf("Session %d %s %s %s", session.id, session.name, session.start, session.finish)
+		sessions = append(sessions, session)
+	}
+	return sessions
+}
+
+func getSessionsToday(db *sql.DB) ([]Session, error) {
+	rows, err := db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL AND start BETWEEN NOW() AND CURRENT_DATE() + INTERVAL 1 DAY)")
 	if err != nil {
 		return nil, err
 	}
 
-	var sessions []Session
-	for res.Next() {
-		var session Session
-		res.Scan(&session.id, &session.name, &session.start, &session.finish)
-		log.Printf("Session %d %s %s %s", session.id, session.name, session.start, session.finish)
-	}
-
+	sessions := extractSessions(rows)
 	return sessions, nil
 }
 
-func getSessionsToday(db *sql.DB) ([]Session, error) {
-	now := time.Now()
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	return getSessions(db, dayStart, now)
-}
-
 func getSessionsDay(db *sql.DB) ([]Session, error) {
-	now := time.Now()
-	return getSessions(db, now.Add(-time.Hour*24), now)
+	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NOT NULL AND start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
+	if err != nil {
+		return nil, err
+	}
+
+	sessions := extractSessions(rows)
+	return sessions, nil
 }
 
 func getSessionsWeek(db *sql.DB) ([]Session, error) {
-	now := time.Now()
-	return getSessions(db, now.Add(-time.Hour*24*7), now)
+	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NOT NULL AND start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
+	if err != nil {
+		return nil, err
+	}
+
+	sessions := extractSessions(rows)
+	return sessions, nil
 }
 
 func getSessionsMonth(db *sql.DB) ([]Session, error) {
-	now := time.Now()
-	return getSessions(db, now.Add(-time.Hour*24*30), now)
+	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NOT NULL AND start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
+	if err != nil {
+		return nil, err
+	}
+
+	sessions := extractSessions(rows)
+	return sessions, nil
 }
 
 func getSessionsYear(db *sql.DB) ([]Session, error) {
-	now := time.Now()
-	return getSessions(db, now.Add(-time.Hour*24*365), now)
+	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NOT NULL AND start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
+	if err != nil {
+		return nil, err
+	}
+
+	sessions := extractSessions(rows)
+	return sessions, nil
 }
 
 func totalDuration(sessions []Session) time.Duration {
 	var totalDuration time.Duration
 	for _, session := range sessions {
-		duration := session.start.Sub(session.finish)
+		duration := session.finish.Sub(session.start)
 		totalDuration += duration
 	}
 	return totalDuration
@@ -202,7 +221,7 @@ func totalDuration(sessions []Session) time.Duration {
 
 func displaySessionsStats(sessions []Session) error {
 	duration := totalDuration(sessions)
-	log.Println(duration)
+	log.Println("Duration:", duration)
 	return nil
 }
 
@@ -259,18 +278,14 @@ type Session struct {
 }
 
 func currentSessions(db *sql.DB) ([]Session, error) {
-	res, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
+	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
 	if err != nil {
 		log.Printf("Current sessions failed with error: %s", err)
 		return nil, err
 	}
 
-	var sessions []Session
-	for res.Next() {
-		var session Session
-		res.Scan(&session.id, &session.name, &session.start, &session.finish)
-		sessions = append(sessions, session)
-	}
+	sessions := extractSessions(rows)
+
 	return sessions, nil
 }
 
