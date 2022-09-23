@@ -10,6 +10,7 @@ import (
 
 	"github.com/TwiN/go-color"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/guptarohit/asciigraph"
 	"github.com/hako/durafmt"
 )
 
@@ -265,10 +266,10 @@ func displayDuration(duration time.Duration, time string) {
 	fmt.Println(color.Ize(color.Green, durafmt.Parse(duration).LimitFirstN(2).String()))
 }
 
-func displayStats(db *sql.DB, time string) error {
+func displayStats(db *sql.DB, period string) error {
 	var sessions []Session
 	var err error
-	switch time {
+	switch period {
 	case "":
 		fmt.Println("Statistics:")
 		sessions, err = getSessions(db)
@@ -296,7 +297,22 @@ func displayStats(db *sql.DB, time string) error {
 
 	fmt.Printf("%d sessions\n", len(sessions))
 	duration := totalDuration(sessions)
-	displayDuration(duration, time)
+	displayDuration(duration, period)
+
+	if period == "week" {
+		data := []float64{0, 0, 0, 0, 0, 0, 0}
+		now := time.Now()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		for _, session := range sessions {
+			day := time.Date(session.start.Year(), session.start.Month(), session.start.Day(), 0, 0, 0, 0, session.start.Location())
+			daysAgo := int(today.Sub(day).Hours() / 24.0)
+			sessionDuration := session.finish.Sub(session.start).Minutes()
+			data[6-daysAgo] += sessionDuration
+		}
+		graph := asciigraph.Plot(data, asciigraph.Width(30))
+
+		fmt.Println(graph)
+	}
 
 	return nil
 }
