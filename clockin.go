@@ -30,7 +30,6 @@ func rowsAffected(res sql.Result) (int64, error) {
 		log.Printf("Error when getting rows affected: %s\n", err)
 		return 0, err
 	}
-	log.Printf("Rows affected: %d", rows)
 	return rows, nil
 }
 
@@ -49,8 +48,6 @@ func dbConnection() (*sql.DB, error) {
 		return nil, err
 	}
 
-	// rowsAffected(res)
-
 	db.Close()
 	db, err = sql.Open("mysql", dsn(dbname))
 	if err != nil {
@@ -61,8 +58,6 @@ func dbConnection() (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(time.Minute * 5)
-
-	// log.Printf("Connection established")
 	return db, nil
 }
 
@@ -86,7 +81,6 @@ func showTable(db *sql.DB) error {
 		return err
 	}
 
-	// log.Println("\n\nTable:")
 	for res.Next() {
 		var session Session
 		res.Scan(&session.id, &session.name, &session.start, &session.finish)
@@ -117,18 +111,12 @@ func startRecording(db *sql.DB, name string) error {
 		return err
 	}
 
-	// rowsAffected(res)
-	fmt.Println("Recording started")
+	fmt.Println(color.Ize(color.Green, "Recording started"))
 	return nil
 }
 
-func finishRecording(db *sql.DB, name string) error {
-	var query string
-	if name == "all" {
-		query = "UPDATE clockin set finish=? WHERE finish is NULL"
-	} else {
-		query = "UPDATE clockin set finish=? WHERE finish is NULL AND name=?"
-	}
+func finishRecordingNamed(db *sql.DB, name string) error {
+	query := "UPDATE clockin set finish=? WHERE finish is NULL AND name=?"
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -154,10 +142,47 @@ func finishRecording(db *sql.DB, name string) error {
 		log.Printf("Error when finding rows affected: %s\n", err)
 		return err
 	}
-	if n > 1 {
-		fmt.Printf("Recording stopped for %d sessions\n", n)
+
+	if n == 0 {
+		fmt.Printf(color.Ize(color.Red, "Error: Name '%s' does not exist\n"), name)
+	} else if n > 1 {
+		fmt.Printf(color.Ize(color.Green, "Recording stopped for %d sessions named '%s'\n"), n, name)
 	} else {
-		fmt.Printf("Recording stopped\n")
+		fmt.Printf(color.Ize(color.Green, "Recording stopped for '%s'\n"), name)
+	}
+
+	return nil
+}
+
+func finishRecording(db *sql.DB) error {
+	query := "UPDATE clockin set finish=? WHERE finish is NULL"
+	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelfunc()
+	stmt, err := db.PrepareContext(ctx, query)
+	if err != nil {
+		log.Printf("Error when preparing SQL update statement: %s\n", err)
+		return err
+	}
+	defer stmt.Close()
+
+	res, err := stmt.ExecContext(ctx, time.Now().UTC())
+	if err != nil {
+		log.Printf("Error when inserting row into products table: %s\n", err)
+		return err
+	}
+
+	n, err := rowsAffected(res)
+	if err != nil {
+		log.Printf("Error when finding rows affected: %s\n", err)
+		return err
+	}
+
+	if n == 0 {
+		fmt.Printf(color.Ize(color.Red, "Error: No sessions running\n"), n)
+	} else if n > 1 {
+		fmt.Printf(color.Ize(color.Green, "Recording stopped for %d sessions\n"), n)
+	} else {
+		fmt.Printf(color.Ize(color.Green, "Recording stopped\n"))
 	}
 
 	return nil
@@ -168,60 +193,49 @@ func extractSessions(rows *sql.Rows) []Session {
 	for rows.Next() {
 		var session Session
 		rows.Scan(&session.id, &session.name, &session.start, &session.finish)
-		// log.Printf("%d %s %s %s", session.id, session.name, session.start, session.finish)
 		sessions = append(sessions, session)
 	}
 	return sessions
 }
 
-func getSessionsToday(db *sql.DB) ([]Session, error) {
-	rows, err := db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL AND start BETWEEN NOW() AND CURRENT_DATE() + INTERVAL 1 DAY)")
+func getSessions(db *sql.DB) ([]Session, error) {
+	rows, err := db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL")
 	if err != nil {
 		return nil, err
 	}
 
 	sessions := extractSessions(rows)
 	return sessions, nil
+}
+
+func getPeriodSessions(db *sql.DB, sqlDateRange string) ([]Session, error) {
+	rows, err := db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL AND " + sqlDateRange)
+	if err != nil {
+		return nil, err
+	}
+
+	sessions := extractSessions(rows)
+	return sessions, nil
+}
+
+func getSessionsToday(db *sql.DB) ([]Session, error) {
+	return getPeriodSessions(db, "start BETWEEN NOW() AND CURRENT_DATE() + INTERVAL 1 DAY)")
 }
 
 func getSessionsDay(db *sql.DB) ([]Session, error) {
-	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NOT NULL AND start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
-	if err != nil {
-		return nil, err
-	}
-
-	sessions := extractSessions(rows)
-	return sessions, nil
+	return getPeriodSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
 }
 
 func getSessionsWeek(db *sql.DB) ([]Session, error) {
-	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NOT NULL AND start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
-	if err != nil {
-		return nil, err
-	}
-
-	sessions := extractSessions(rows)
-	return sessions, nil
+	return getPeriodSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
 }
 
 func getSessionsMonth(db *sql.DB) ([]Session, error) {
-	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NOT NULL AND start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
-	if err != nil {
-		return nil, err
-	}
-
-	sessions := extractSessions(rows)
-	return sessions, nil
+	return getPeriodSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
 }
 
 func getSessionsYear(db *sql.DB) ([]Session, error) {
-	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NOT NULL AND start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
-	if err != nil {
-		return nil, err
-	}
-
-	sessions := extractSessions(rows)
-	return sessions, nil
+	return getPeriodSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
 }
 
 func totalDuration(sessions []Session) time.Duration {
@@ -233,16 +247,13 @@ func totalDuration(sessions []Session) time.Duration {
 	return totalDuration
 }
 
-// func displaySessionsStats(sessions []Session) error {
-// 	duration := totalDuration(sessions)
-// 	log.Println("Duration:", color.Ize(color.Green, duration.String()))
-// 	return nil
-// }
-
 func displayStats(db *sql.DB, time string) error {
 	var sessions []Session
 	var err error
 	switch time {
+	case "":
+		fmt.Println("Statistics:")
+		sessions, err = getSessions(db)
 	case "today":
 		fmt.Println("Sessions from today:")
 		sessions, err = getSessionsToday(db)
@@ -345,6 +356,10 @@ func getAdditionalOption() string {
 	return option
 }
 
+func checkValidTime(time string) bool {
+	return time == "" || time == "today" || time == "day" || time == "week" || time == "month" || time == "year"
+}
+
 func main() {
 	db, err := dbConnection()
 	if err != nil {
@@ -371,7 +386,12 @@ func main() {
 		}
 	case "finish", "finished", "end", "stop", "halt":
 		name := getAdditionalOption()
-		err := finishRecording(db, name)
+		var err error
+		if name == "" {
+			err = finishRecording(db)
+		} else {
+			err = finishRecordingNamed(db, name)
+		}
 		if err != nil {
 			log.Printf("Finish recording failed with error: %s\n", err)
 			return
@@ -390,6 +410,10 @@ func main() {
 		}
 	case "stats", "statistics":
 		time := getAdditionalOption()
+		if !checkValidTime(time) {
+			fmt.Println(color.Ize(color.Red, "Error: Statistics time range invalid"))
+			return
+		}
 		err := displayStats(db, time)
 		if err != nil {
 			log.Printf("Display stats failed with error: %s\n", err)
