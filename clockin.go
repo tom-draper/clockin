@@ -299,19 +299,27 @@ func displayStats(db *sql.DB, period string) error {
 	duration := totalDuration(sessions)
 	displayDuration(duration, period)
 
-	if period == "week" {
-		data := []float64{0, 0, 0, 0, 0, 0, 0}
+	if period == "week" || period == "month" || period == "year" {
+		var nDays int
+		if period == "week" {
+			nDays = 7
+		} else if period == "month" {
+			nDays = 30
+		} else if period == "year" {
+			nDays = 365
+		}
+		data := make([]float64, nDays)
 		now := time.Now()
 		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 		for _, session := range sessions {
 			day := time.Date(session.start.Year(), session.start.Month(), session.start.Day(), 0, 0, 0, 0, session.start.Location())
 			daysAgo := int(today.Sub(day).Hours() / 24.0)
 			sessionDuration := session.finish.Sub(session.start).Minutes()
-			data[6-daysAgo] += sessionDuration
+			data[nDays-1-daysAgo] += sessionDuration
 		}
-		graph := asciigraph.Plot(data, asciigraph.Width(30))
+		graph := asciigraph.Plot(data, asciigraph.Width(60))
 
-		fmt.Println(graph)
+		fmt.Printf("\n%s\n\n", graph)
 	}
 
 	return nil
