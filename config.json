@@ -1,4 +1,4 @@
 {
-    "timeout": null,
+    "timeout": 12,
     "discardOnTimeout": false
 }

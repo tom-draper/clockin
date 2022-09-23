@@ -95,7 +95,7 @@ func showTable(db *sql.DB) error {
 }
 
 func startRecording(db *sql.DB, name string) error {
-	query := "INSERT INTO clockin(name, start, finish) VALUES (?, ?, ?)"
+	query := "INSERT INTO clockin(name, start, finish) VALUES (?, NOW(), NULL)"
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -105,7 +105,7 @@ func startRecording(db *sql.DB, name string) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.ExecContext(ctx, name, time.Now().UTC(), nil)
+	_, err = stmt.ExecContext(ctx, name)
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s\n", err)
 		return err
@@ -116,7 +116,7 @@ func startRecording(db *sql.DB, name string) error {
 }
 
 func finishRecordingNamed(db *sql.DB, name string) error {
-	query := "UPDATE clockin set finish=? WHERE finish is NULL AND name=?"
+	query := "UPDATE clockin set finish=NOW() WHERE finish is NULL AND name=?"
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -128,9 +128,9 @@ func finishRecordingNamed(db *sql.DB, name string) error {
 
 	var res sql.Result
 	if name == "all" {
-		res, err = stmt.ExecContext(ctx, time.Now().UTC())
+		res, err = stmt.ExecContext(ctx)
 	} else {
-		res, err = stmt.ExecContext(ctx, time.Now().UTC(), name)
+		res, err = stmt.ExecContext(ctx, name)
 	}
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s\n", err)
@@ -155,7 +155,7 @@ func finishRecordingNamed(db *sql.DB, name string) error {
 }
 
 func finishRecording(db *sql.DB) error {
-	query := "UPDATE clockin set finish=? WHERE finish is NULL"
+	query := "UPDATE clockin set finish=NOW() WHERE finish is NULL"
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -165,7 +165,7 @@ func finishRecording(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	res, err := stmt.ExecContext(ctx, time.Now().UTC())
+	res, err := stmt.ExecContext(ctx)
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s\n", err)
 		return err
@@ -247,6 +247,24 @@ func totalDuration(sessions []Session) time.Duration {
 	return totalDuration
 }
 
+func displayDuration(duration time.Duration, time string) {
+	switch time {
+	case "":
+		fmt.Printf("Total duration: ")
+	case "today":
+		fmt.Printf("Total duration today: ")
+	case "day":
+		fmt.Printf("Total duration in last 24 hours: ")
+	case "week":
+		fmt.Printf("Total duration in last week: ")
+	case "month":
+		fmt.Printf("Total duration in last month: ")
+	case "year":
+		fmt.Printf("Total duration in last year: ")
+	}
+	fmt.Println(color.Ize(color.Green, durafmt.Parse(duration).LimitFirstN(2).String()))
+}
+
 func displayStats(db *sql.DB, time string) error {
 	var sessions []Session
 	var err error
@@ -269,13 +287,17 @@ func displayStats(db *sql.DB, time string) error {
 	case "year":
 		fmt.Println("Sessions from last year:")
 		sessions, err = getSessionsYear(db)
+
 	}
 	if err != nil {
 		log.Printf("Sessions in time range failed with error: %s\n", err)
 		return err
 	}
+
+	fmt.Printf("%d sessions\n", len(sessions))
 	duration := totalDuration(sessions)
-	fmt.Println("Total duration:", color.Ize(color.Green, durafmt.Parse(duration).LimitFirstN(2).String()))
+	displayDuration(duration, time)
+
 	return nil
 }
 
