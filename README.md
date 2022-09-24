@@ -10,7 +10,7 @@ Clock In is a command-line tool that lets you to track your working periods. Sta
 
 ### Install Dependencies
 
-MySQL is used by Clock In to store timings data locally on your machine. If MySQL is not installed on your machine, download it <a href="https://dev.mysql.com/downloads/mysql/">here</a>. During setup, ensure you make note of your username and password and copy them into the .env file.
+MySQL is used by Clock In to store timings data locally on your machine. If MySQL is not installed on your machine, download it <a href="https://dev.mysql.com/downloads/mysql/">here</a>. During setup, ensure you make note of your username and password and copy them into the .env file or enter them into the command line during your first run of the program.
 
 Download Go dependencies with:
 
