@@ -199,8 +199,14 @@ func extractSessions(rows *sql.Rows) []Session {
 	return sessions
 }
 
-func getSessions(db *sql.DB) ([]Session, error) {
-	rows, err := db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL")
+func getSessions(db *sql.DB, sqlDateRange string) ([]Session, error) {
+	var rows *sql.Rows
+	var err error
+	if sqlDateRange == "" {
+		rows, err = db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL")
+	} else {
+		rows, err = db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL AND " + sqlDateRange)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -209,34 +215,28 @@ func getSessions(db *sql.DB) ([]Session, error) {
 	return sessions, nil
 }
 
-func getPeriodSessions(db *sql.DB, sqlDateRange string) ([]Session, error) {
-	rows, err := db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL AND " + sqlDateRange)
-	if err != nil {
-		return nil, err
-	}
-
-	sessions := extractSessions(rows)
-	return sessions, nil
+func getAllSessions(db *sql.DB) ([]Session, error) {
+	return getSessions(db, "")
 }
 
 func getSessionsToday(db *sql.DB) ([]Session, error) {
-	return getPeriodSessions(db, "start BETWEEN NOW() AND CURRENT_DATE() + INTERVAL 1 DAY)")
+	return getSessions(db, "start BETWEEN NOW() AND CURRENT_DATE() + INTERVAL 1 DAY)")
 }
 
 func getSessionsDay(db *sql.DB) ([]Session, error) {
-	return getPeriodSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
+	return getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
 }
 
 func getSessionsWeek(db *sql.DB) ([]Session, error) {
-	return getPeriodSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
+	return getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
 }
 
 func getSessionsMonth(db *sql.DB) ([]Session, error) {
-	return getPeriodSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
+	return getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
 }
 
 func getSessionsYear(db *sql.DB) ([]Session, error) {
-	return getPeriodSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
+	return getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
 }
 
 func totalDuration(sessions []Session) time.Duration {
@@ -272,7 +272,7 @@ func displayStats(db *sql.DB, period string) error {
 	switch period {
 	case "":
 		fmt.Println("Statistics:")
-		sessions, err = getSessions(db)
+		sessions, err = getSessions(db, "")
 	case "today":
 		fmt.Println("Sessions from today:")
 		sessions, err = getSessionsToday(db)
@@ -349,6 +349,35 @@ type Session struct {
 	finish time.Time
 }
 
+func rowCount(rows *sql.Rows) int {
+	count := 0
+	for rows.Next() {
+		count++
+	}
+	return count
+}
+
+func numCurrentSessions(db *sql.DB) (int, error) {
+	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
+	if err != nil {
+		log.Printf("Current sessions failed with error: %s\n", err)
+		return 0, err
+	}
+
+	count := rowCount(rows)
+	return count, nil
+}
+
+func remindCurrentSessions(db *sql.DB) {
+	n, err := numCurrentSessions(db)
+	if err != nil {
+		log.Printf("Getting number of current sessions failed with error: %s", err)
+		return
+	}
+	if n > 1 {
+		fmt.Println(color.Ize(color.Yellow, "Reminder: Session currently running"))
+	}
+}
 func currentSessions(db *sql.DB) ([]Session, error) {
 	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
 	if err != nil {
@@ -424,6 +453,7 @@ func main() {
 
 	switch command {
 	case "start", "starting", "go":
+		remindCurrentSessions(db)
 		name := getAdditionalOption()
 		err := startRecording(db, name)
 		if err != nil {
@@ -449,6 +479,7 @@ func main() {
 			return
 		}
 	case "status", "info", "running":
+		remindCurrentSessions(db)
 		err := status(db)
 		if err != nil {
 			log.Printf("Data reset failed with error: %s\n", err)

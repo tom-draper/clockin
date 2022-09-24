@@ -4,24 +4,25 @@ Clock In is a command-line tool that allows you to track your working periods. S
 
 ## Getting Started
 
-### MySQL
+### Install Dependencies
 
-If MySQL is not installed on your machine, download it from the <a href="https://dev.mysql.com/downloads/mysql/">MySQL website</a>. During setup, ensure you note your username and password and copy them into the .env file.
+MySQL is used by Clock In to store timings data locally on your machine. If MySQL is not installed on your machine, download it <a href="https://dev.mysql.com/downloads/mysql/">here</a>. During setup, ensure you make note of your username and password and copy them into the .env file.
+
+Download Go dependencies with:
+
+```bash
+go mod download
+```
 
 ### Build
 
 Compile the program on your machine with:
 
 ```bash
-go mod download
 go build clockin.go
 ```
 
-Run the executable with:
-
-```bash
-./clockin
-```
+To make the executable runnable from anywhere, add the directory to your PATH environment variable.
 
 ## How to Use
 
@@ -33,7 +34,7 @@ To start recording a new work session, run:
 clockin start
 ```
 
-With multiple work sessions running at once, you can keep track of them by providing a name identifier:
+You can keep track of multiple work sessions running at once by providing a name identifier:
 
 ```bash
 clockin start homework
@@ -47,13 +48,13 @@ To finish recording a work session, run:
 clockin stop
 ```
 
-With multiple work sessions running at once, you can specify a work session with its name identifier:
+You can specify a particular work session by its name identifier:
 
 ```bash
 clockin stop homework
 ```
 
-To stop all current running work sessions, run:
+To stop all currently running work sessions, run:
 
 ```bash
 clockin stop all
@@ -61,7 +62,7 @@ clockin stop all
 
 ### Show running sessions
 
-To list currently running work sessions, run:
+To list all currently running work sessions, run:
 
 ```bash
 clockin status
@@ -83,7 +84,7 @@ A status summary can be displayed by running:
 clockin stats
 ```
 
-A time period can be specified.
+This summary can be limited to a particular time period:
 
 ```bash
 clockin stats today
