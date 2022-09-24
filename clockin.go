@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"time"
 
 	"github.com/TwiN/go-color"
+	ui "github.com/gizak/termui/v3"
+	"github.com/gizak/termui/v3/widgets"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/guptarohit/asciigraph"
 	"github.com/hako/durafmt"
@@ -24,6 +27,11 @@ func check(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func roundFloat(val float64, precision uint) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(val*ratio) / ratio
 }
 
 func dsn(username string, password string, dbName string) string {
@@ -243,22 +251,24 @@ func totalDuration(sessions []Session) time.Duration {
 	return totalDuration
 }
 
-func displayDuration(duration time.Duration, time string) {
+func displayDurationString(duration time.Duration, time string) string {
+	var str string
 	switch time {
 	case "":
-		fmt.Printf("Total duration: ")
+		str = "Total duration: "
 	case "today":
-		fmt.Printf("Total duration today: ")
+		str = "Total duration today: "
 	case "day":
-		fmt.Printf("Total duration in last 24 hours: ")
+		str = "Total duration in last 24 hours: "
 	case "week":
-		fmt.Printf("Total duration in last week: ")
+		str = "Total duration in last week: "
 	case "month":
-		fmt.Printf("Total duration in last month: ")
+		str = "Total duration in last month: "
 	case "year":
-		fmt.Printf("Total duration in last year: ")
+		str = "Total duration in last year: "
 	}
-	fmt.Println(color.Ize(color.Green, durafmt.Parse(duration).LimitFirstN(2).String()))
+	str += durafmt.Parse(duration).LimitFirstN(2).String()
+	return str
 }
 
 func displayStats(db *sql.DB, period string) error {
@@ -290,15 +300,50 @@ func displayStats(db *sql.DB, period string) error {
 		return err
 	}
 
-	fmt.Printf("%d sessions\n", len(sessions))
-	duration := totalDuration(sessions)
-	displayDuration(duration, period)
+	if err := ui.Init(); err != nil {
+		log.Fatalf("failed to initialize termui: %v", err)
+	}
+	defer ui.Close()
 
-	if period == "week" || period == "month" || period == "year" {
+	p := widgets.NewParagraph()
+	duration := totalDuration(sessions)
+	durationStr := displayDurationString(duration, period)
+	p.Border = false
+	p.TextStyle = ui.NewStyle(ui.ColorGreen)
+	p.Text = fmt.Sprintf("%d sessions\n%s", len(sessions), durationStr)
+	p.SetRect(0, 0, 57, 4)
+	ui.Render(p)
+
+	if period == "week" {
+		bc := widgets.NewBarChart()
+		data := []float64{100.1, 100.1, 100.2, 200.44, 100.1, 100.3, 100.4}
+		now := time.Now()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		for _, session := range sessions {
+			day := time.Date(session.start.Year(), session.start.Month(), session.start.Day(), 0, 0, 0, 0, session.start.Location())
+			daysAgo := int(today.Sub(day).Hours() / 24.0)
+			sessionDuration := session.finish.Sub(session.start).Minutes()
+			data[6-daysAgo] += sessionDuration
+		}
+
+		for i, val := range data {
+			data[i] = roundFloat(val, 0)
+		}
+
+		bc.Data = data
+		bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+		bc.Title = "Last 7 days"
+		bc.SetRect(0, 4, 57, 25)
+		bc.BarWidth = 7
+		bc.PaddingLeft = 10
+		bc.BarColors = []ui.Color{ui.ColorGreen}
+		bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
+		bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
+
+		ui.Render(bc)
+	} else if period == "month" || period == "year" {
 		var nDays int
-		if period == "week" {
-			nDays = 7
-		} else if period == "month" {
+		if period == "month" {
 			nDays = 30
 		} else if period == "year" {
 			nDays = 365
@@ -315,6 +360,18 @@ func displayStats(db *sql.DB, period string) error {
 		graph := asciigraph.Plot(data, asciigraph.Width(60))
 
 		fmt.Printf("\n%s\n\n", graph)
+	}
+
+	p = widgets.NewParagraph()
+	p.Border = false
+	p.Text = "Press any key to exit"
+	p.SetRect(0, 25, 57, 28)
+	ui.Render(p)
+
+	for e := range ui.PollEvents() {
+		if e.Type == ui.KeyboardEvent {
+			break
+		}
 	}
 
 	return nil
