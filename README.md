@@ -1,4 +1,4 @@
-# Clock In (In-Progress)
+# Clock In
 
 Clock In is a command-line tool that allows you to track your working periods. Start and stop the timer with two simple commands and view stats and trends and earn awards for good behaviour!.
 
