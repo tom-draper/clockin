@@ -11,6 +11,7 @@ require (
 
 require (
 	github.com/guptarohit/asciigraph v0.5.5 // indirect
+	github.com/joho/godotenv v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/nsf/termbox-go v1.1.1 // indirect

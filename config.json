@@ -1,4 +1,6 @@
 {
+    "mySQLUsername": "",
+    "mySQLPassword": "",
     "timeout": 12,
     "discardOnTimeout": false
 }

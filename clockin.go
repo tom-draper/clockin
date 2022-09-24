@@ -12,16 +12,21 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/guptarohit/asciigraph"
 	"github.com/hako/durafmt"
+	"github.com/joho/godotenv"
 )
 
 const (
-	username = "root"
-	password = "root"
 	hostname = "127.0.0.1:3306"
 	dbname   = "clockin"
 )
 
-func dsn(dbName string) string {
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func dsn(username string, password string, dbName string) string {
 	return fmt.Sprintf("%s:%s@tcp(%s)/%s?parseTime=true", username, password, hostname, dbName)
 }
 
@@ -34,8 +39,8 @@ func rowsAffected(res sql.Result) (int64, error) {
 	return rows, nil
 }
 
-func dbConnection() (*sql.DB, error) {
-	db, err := sql.Open("mysql", dsn(""))
+func dbConnection(username string, password string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsn(username, password, ""))
 	if err != nil {
 		log.Printf("Error when opening database: %s\n", err)
 		return nil, err
@@ -50,7 +55,7 @@ func dbConnection() (*sql.DB, error) {
 	}
 
 	db.Close()
-	db, err = sql.Open("mysql", dsn(dbname))
+	db, err = sql.Open("mysql", dsn(username, password, dbname))
 	if err != nil {
 		log.Printf("Error when opening database: %s\n", err)
 		return nil, err
@@ -89,14 +94,18 @@ func showTable(db *sql.DB) error {
 		if session.name == "" {
 			name = "none"
 		}
-		fmt.Printf("%d %s %s %s\n", session.id, name, session.start, session.finish)
+		if session.finish.IsZero() {
+			fmt.Printf("%d %s %s %s\n", session.id, name, session.start, color.Ize(color.Yellow, session.finish.String()))
+		} else {
+			fmt.Printf("%d %s %s %s\n", session.id, name, session.start, session.finish)
+		}
 	}
 
 	return nil
 }
 
 func startRecording(db *sql.DB, name string) error {
-	query := "INSERT INTO clockin(name, start, finish) VALUES (?, NOW(), NULL)"
+	query := "INSERT INTO clockin(name, start, finish) VALUES (?, ?, NULL)"
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -106,18 +115,29 @@ func startRecording(db *sql.DB, name string) error {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.ExecContext(ctx, name)
+	now := time.Now().UTC()
+	_, err = stmt.ExecContext(ctx, name, now)
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s\n", err)
 		return err
 	}
 
-	fmt.Println(color.Ize(color.Green, "Recording started"))
+	if name == "" {
+		fmt.Printf(color.Ize(color.Green, "Started recording (%s)\n"), now)
+	} else {
+		fmt.Printf(color.Ize(color.Green, "Started recording %s (%s)\n"), name, now)
+	}
 	return nil
 }
 
-func finishRecordingNamed(db *sql.DB, name string) error {
-	query := "UPDATE clockin set finish=NOW() WHERE finish is NULL AND name=?"
+func finishRecording(db *sql.DB, name string) error {
+	var query string
+	if name == "" {
+		query = "UPDATE clockin set finish=NOW() WHERE finish is NULL"
+	} else {
+		query = "UPDATE clockin set finish=NOW() WHERE finish is NULL AND name=?"
+	}
+
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -128,7 +148,7 @@ func finishRecordingNamed(db *sql.DB, name string) error {
 	defer stmt.Close()
 
 	var res sql.Result
-	if name == "all" {
+	if name == "" || name == "all" {
 		res, err = stmt.ExecContext(ctx)
 	} else {
 		res, err = stmt.ExecContext(ctx, name)
@@ -144,48 +164,23 @@ func finishRecordingNamed(db *sql.DB, name string) error {
 		return err
 	}
 
-	if n == 0 {
-		fmt.Printf(color.Ize(color.Red, "Error: Name '%s' does not exist\n"), name)
-	} else if n > 1 {
-		fmt.Printf(color.Ize(color.Green, "Recording stopped for %d sessions named '%s'\n"), n, name)
+	if name == "" {
+		if n == 0 {
+			fmt.Printf(color.Ize(color.Red, "Error: No sessions running\n"), n)
+		} else if n > 1 {
+			fmt.Printf(color.Ize(color.Green, "Stopped recording for %d sessions\n"), n)
+		} else {
+			fmt.Println(color.Ize(color.Green, "Stopped recording"))
+		}
 	} else {
-		fmt.Printf(color.Ize(color.Green, "Recording stopped for '%s'\n"), name)
+		if n == 0 {
+			fmt.Printf(color.Ize(color.Red, "Error: Name '%s' does not exist\n"), name)
+		} else if n > 1 {
+			fmt.Printf(color.Ize(color.Green, "Stopped recording for %d sessions named '%s'\n"), n, name)
+		} else {
+			fmt.Printf(color.Ize(color.Green, "Stopped recording for '%s'\n"), name)
+		}
 	}
-
-	return nil
-}
-
-func finishRecording(db *sql.DB) error {
-	query := "UPDATE clockin set finish=NOW() WHERE finish is NULL"
-	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelfunc()
-	stmt, err := db.PrepareContext(ctx, query)
-	if err != nil {
-		log.Printf("Error when preparing SQL update statement: %s\n", err)
-		return err
-	}
-	defer stmt.Close()
-
-	res, err := stmt.ExecContext(ctx)
-	if err != nil {
-		log.Printf("Error when inserting row into products table: %s\n", err)
-		return err
-	}
-
-	n, err := rowsAffected(res)
-	if err != nil {
-		log.Printf("Error when finding rows affected: %s\n", err)
-		return err
-	}
-
-	if n == 0 {
-		fmt.Printf(color.Ize(color.Red, "Error: No sessions running\n"), n)
-	} else if n > 1 {
-		fmt.Printf(color.Ize(color.Green, "Recording stopped for %d sessions\n"), n)
-	} else {
-		fmt.Printf(color.Ize(color.Green, "Recording stopped\n"))
-	}
-
 	return nil
 }
 
@@ -272,7 +267,7 @@ func displayStats(db *sql.DB, period string) error {
 	switch period {
 	case "":
 		fmt.Println("Statistics:")
-		sessions, err = getSessions(db, "")
+		sessions, err = getAllSessions(db)
 	case "today":
 		fmt.Println("Sessions from today:")
 		sessions, err = getSessionsToday(db)
@@ -435,8 +430,34 @@ func checkValidTime(time string) bool {
 	return time == "" || time == "today" || time == "day" || time == "week" || time == "month" || time == "year"
 }
 
+func getDBLoginDetails() (string, string) {
+	err := godotenv.Load(".env")
+	if err != nil {
+		fmt.Println(color.Ize(color.Red, "Error loading variables from .env file"))
+	}
+	username := os.Getenv("MYSQL_USERNAME")
+	password := os.Getenv("MYSQL_PASSWORD")
+	if username == "" || password == "" {
+		fmt.Printf("Enter MySQL username: ")
+		fmt.Scanln(&username)
+		fmt.Printf("Enter MySQL password: ")
+		fmt.Scanln(&password)
+
+		// Save to .env file (overwrite any existing)
+		f, err := os.Create("./.env")
+		check(err)
+		defer f.Close()
+		_, err = fmt.Fprintf(f, "MYSQL_USERNAME=%s\nMYSQL_PASSWORD=%s", username, password)
+		check(err)
+	}
+
+	return username, password
+}
+
 func main() {
-	db, err := dbConnection()
+	username, password := getDBLoginDetails()
+
+	db, err := dbConnection(username, password)
 	if err != nil {
 		log.Printf("Error when getting database connection: %s\n", err)
 		return
@@ -462,12 +483,7 @@ func main() {
 		}
 	case "finish", "finished", "end", "stop", "halt":
 		name := getAdditionalOption()
-		var err error
-		if name == "" {
-			err = finishRecording(db)
-		} else {
-			err = finishRecordingNamed(db, name)
-		}
+		err := finishRecording(db, name)
 		if err != nil {
 			log.Printf("Finish recording failed with error: %s\n", err)
 			return
