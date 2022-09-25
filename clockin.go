@@ -33,23 +33,13 @@ func checkValidTime(time string) bool {
 }
 
 func main() {
-	username, password := GetDBLoginDetails()
-
-	db, err := DBConnection(username, password)
+	db, err := OpenDatabase()
 	if err != nil {
-		log.Printf("Error when getting database connection: %s\n", err)
-		return
-	}
-	defer db.Close()
-
-	err = CreateTable(db)
-	if err != nil {
-		log.Printf("Create table failed with error: %s\n", err)
+		log.Printf("Opening database failed with error: %s\n", err)
 		return
 	}
 
 	command := getCommand()
-
 	switch command {
 	case "start", "starting", "go":
 		RemindCurrentSessions(db)

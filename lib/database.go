@@ -18,7 +18,7 @@ const (
 	dbname   = "clockin"
 )
 
-func GetDBLoginDetails() (string, string) {
+func getDBLoginDetails() (string, string) {
 	err := godotenv.Load(".env")
 	if err != nil {
 		fmt.Println(color.Ize(color.Red, "Error loading variables from .env file"))
@@ -81,7 +81,7 @@ func rowsAffected(res sql.Result) (int64, error) {
 	return rows, nil
 }
 
-func DBConnection(username string, password string) (*sql.DB, error) {
+func dbConnection(username string, password string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn(username, password, ""))
 	if err != nil {
 		log.Printf("Error when opening database: %s\n", err)
@@ -109,7 +109,7 @@ func DBConnection(username string, password string) (*sql.DB, error) {
 	return db, nil
 }
 
-func CreateTable(db *sql.DB) error {
+func createTable(db *sql.DB) error {
 	query := `CREATE TABLE IF NOT EXISTS clockin(id int primary key auto_increment, name varchar(100), start datetime default CURRENT_TIMESTAMP, finish datetime)`
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
@@ -282,4 +282,22 @@ func currentSessions(db *sql.DB) ([]Session, error) {
 
 	sessions := ExtractSessions(rows)
 	return sessions, nil
+}
+
+func OpenDatabase() (*sql.DB, error) {
+	username, password := getDBLoginDetails()
+
+	db, err := dbConnection(username, password)
+	if err != nil {
+		log.Printf("Error when getting database connection: %s\n", err)
+		return nil, err
+	}
+	defer db.Close()
+
+	err = createTable(db)
+	if err != nil {
+		log.Printf("Create table failed with error: %s\n", err)
+		return nil, err
+	}
+	return db, nil
 }
