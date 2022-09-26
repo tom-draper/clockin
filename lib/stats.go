@@ -94,7 +94,7 @@ func basicInfo(sessions []Session) (*widgets.Paragraph, *widgets.Paragraph) {
 	p.Title = "Sessions"
 	p.Text = fmt.Sprintf("%d", len(sessions))
 	p.PaddingLeft = 2
-	p.SetRect(0, 4, 20, 7)
+	p.SetRect(0, 4, 15, 7)
 
 	p2 := widgets.NewParagraph()
 	duration := totalDuration(sessions)
@@ -102,9 +102,74 @@ func basicInfo(sessions []Session) (*widgets.Paragraph, *widgets.Paragraph) {
 	p2.Title = "Total duration"
 	p2.Text = durafmt.Parse(duration).LimitFirstN(3).String()
 	p2.PaddingLeft = 2
-	p2.SetRect(20, 4, 61, 7)
+	p2.SetRect(15, 4, 61, 7)
 
 	return p, p2
+}
+
+func nameProportions(sessions []Session) (*widgets.PieChart, []ui.Drawable) {
+	nameTime := make(map[string]float64)
+	for _, session := range sessions {
+		if session.Name != "" && !session.Finish.IsZero() {
+			if _, ok := nameTime[session.Name]; !ok {
+				nameTime[session.Name] = 0.0
+			}
+			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+		}
+	}
+
+	colors := []ui.Color{ui.ColorRed, ui.ColorGreen, ui.ColorYellow, ui.ColorBlue, ui.ColorCyan, ui.ColorMagenta}
+
+	labels := []string{}
+	data := []float64{}
+	i := 0
+	numColors := len(colors)
+	for name, time := range nameTime {
+		if time < 0 {
+			time *= -1
+		}
+		if i > 5 {
+			data[numColors] += time
+		} else {
+			data = append(data, time)
+			labels = append(labels, name)
+		}
+		i++
+	}
+	if len(nameTime) > numColors {
+		labels[numColors] = "Other"
+	}
+
+	pc := widgets.NewPieChart()
+	pc.Title = "Session names"
+	pc.Data = data
+	pc.AngleOffset = -.5 * math.Pi
+	pc.PaddingLeft = 1
+	pc.PaddingTop = 2
+	pc.PaddingRight = 1
+	pc.PaddingBottom = 2
+	pc.Colors = colors
+	pc.LabelFormatter = func(i int, v float64) string {
+		return fmt.Sprintf("%.02f", v)
+	}
+	pc.SetRect(61, 4, 112, 29)
+
+	labelComponents := make([]ui.Drawable, len(labels))
+	for i, name := range labels {
+		p := widgets.NewParagraph()
+		p.TextStyle = ui.NewStyle(ui.ColorGreen)
+		p.Border = false
+		if name == "" {
+			name = "none"
+		}
+		p.Text = name
+		p.TextStyle = ui.NewStyle(colors[i])
+		p.PaddingLeft = 1
+		p.SetRect(112, 4+(i*2), 140, 7+(i*2))
+		labelComponents[i] = p
+	}
+
+	return pc, labelComponents
 }
 
 func (a *All) buildComponents() {
@@ -142,8 +207,18 @@ func (a *All) buildComponents() {
 	bc.PaddingRight = 2
 	bc.SetRect(0, 7, 61, 29)
 
+	pc, pcLabels := nameProportions(a.sessions)
+
+	components := []ui.Drawable{p, p2, bc, pc}
+	components = append(components, pcLabels...)
+	a.components = components
+}
+
+func (t *Today) buildComponents() {
+	p, p2 := basicInfo(t.sessions)
+
 	nameTime := make(map[string]float64)
-	for _, session := range a.sessions {
+	for _, session := range t.sessions {
 		if session.Name != "" && !session.Finish.IsZero() {
 			if _, ok := nameTime[session.Name]; !ok {
 				nameTime[session.Name] = 0.0
@@ -153,39 +228,31 @@ func (a *All) buildComponents() {
 		}
 	}
 
-	data = []float64{}
-	for _, time := range nameTime {
-		data = append(data, time)
-	}
+	pc, pcLabels := nameProportions(t.sessions)
 
-	pc := widgets.NewPieChart()
-	pc.Title = "Work session names"
-	pc.Data = data
-	pc.AngleOffset = -.5 * math.Pi
-	pc.PaddingLeft = 1
-	pc.PaddingTop = 1
-	pc.PaddingRight = 1
-	pc.PaddingBottom = 1
-	pc.LabelFormatter = func(i int, v float64) string {
-		return fmt.Sprintf("%.02f", v)
-	}
-	pc.SetRect(61, 4, 112, 29)
-
-	components := []ui.Drawable{p, p2, bc, pc}
-	a.components = components
-}
-
-func (t *Today) buildComponents() {
-	p, p2 := basicInfo(t.sessions)
-
-	components := []ui.Drawable{p, p2}
+	components := []ui.Drawable{p, p2, pc}
+	components = append(components, pcLabels...)
 	t.components = components
 }
 
 func (d *Day) buildComponents() {
 	p, p2 := basicInfo(d.sessions)
 
-	components := []ui.Drawable{p, p2}
+	nameTime := make(map[string]float64)
+	for _, session := range d.sessions {
+		if session.Name != "" && !session.Finish.IsZero() {
+			if _, ok := nameTime[session.Name]; !ok {
+				nameTime[session.Name] = 0.0
+			}
+			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
+			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+		}
+	}
+
+	pc, pcLabels := nameProportions(d.sessions)
+
+	components := []ui.Drawable{p, p2, pc}
+	components = append(components, pcLabels...)
 	d.components = components
 }
 
@@ -224,7 +291,21 @@ func (w *Week) buildComponents() {
 	bc.PaddingRight = 2
 	bc.SetRect(0, 7, 61, 29)
 
-	components := []ui.Drawable{p, p2, bc}
+	nameTime := make(map[string]float64)
+	for _, session := range w.sessions {
+		if session.Name != "" && !session.Finish.IsZero() {
+			if _, ok := nameTime[session.Name]; !ok {
+				nameTime[session.Name] = 0.0
+			}
+			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
+			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+		}
+	}
+
+	pc, pcLabels := nameProportions(w.sessions)
+
+	components := []ui.Drawable{p, p2, bc, pc}
+	components = append(components, pcLabels...)
 	w.components = components
 }
 
@@ -263,7 +344,21 @@ func (m *Month) buildComponents() {
 	bc.PaddingRight = 2
 	bc.SetRect(0, 7, 61, 29)
 
-	components := []ui.Drawable{p, p2, bc}
+	nameTime := make(map[string]float64)
+	for _, session := range m.sessions {
+		if session.Name != "" && !session.Finish.IsZero() {
+			if _, ok := nameTime[session.Name]; !ok {
+				nameTime[session.Name] = 0.0
+			}
+			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
+			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+		}
+	}
+
+	pc, pcLabels := nameProportions(m.sessions)
+
+	components := []ui.Drawable{p, p2, bc, pc}
+	components = append(components, pcLabels...)
 	m.components = components
 }
 
@@ -302,7 +397,21 @@ func (y *Year) buildComponents() {
 	bc.PaddingRight = 2
 	bc.SetRect(0, 7, 61, 29)
 
-	components := []ui.Drawable{p, p2, bc}
+	nameTime := make(map[string]float64)
+	for _, session := range y.sessions {
+		if session.Name != "" && !session.Finish.IsZero() {
+			if _, ok := nameTime[session.Name]; !ok {
+				nameTime[session.Name] = 0.0
+			}
+			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
+			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+		}
+	}
+
+	pc, pcLabels := nameProportions(y.sessions)
+
+	components := []ui.Drawable{p, p2, bc, pc}
+	components = append(components, pcLabels...)
 	y.components = components
 }
 
