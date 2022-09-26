@@ -154,12 +154,8 @@ func (a *All) buildComponents() {
 	}
 
 	data = []float64{}
-	for name, time := range nameTime {
-		fmt.Println(name, time)
+	for _, time := range nameTime {
 		data = append(data, time)
-	}
-	for {
-
 	}
 
 	pc := widgets.NewPieChart()
