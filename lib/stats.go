@@ -9,7 +9,6 @@ import (
 
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
-	"github.com/guptarohit/asciigraph"
 	"github.com/hako/durafmt"
 )
 
@@ -25,26 +24,6 @@ func totalDuration(sessions []Session) time.Duration {
 		totalDuration += duration
 	}
 	return totalDuration
-}
-
-func displayDurationString(duration time.Duration, time string) string {
-	var str string
-	switch time {
-	case "":
-		str = "Total duration: "
-	case "today":
-		str = "Total duration today: "
-	case "day":
-		str = "Total duration in last 24 hours: "
-	case "week":
-		str = "Total duration in last week: "
-	case "month":
-		str = "Total duration in last month: "
-	case "year":
-		str = "Total duration in last year: "
-	}
-	str += durafmt.Parse(duration).LimitFirstN(2).String()
-	return str
 }
 
 func ExtractSessions(rows *sql.Rows) []Session {
@@ -73,132 +52,362 @@ func getSessions(db *sql.DB, sqlDateRange string) ([]Session, error) {
 	return sessions, nil
 }
 
-func getAllSessions(db *sql.DB) ([]Session, error) {
-	return getSessions(db, "")
+func (a *All) fetchSessions(db *sql.DB) {
+	sessions, err := getSessions(db, "")
+	Check(err)
+	a.sessions = sessions
 }
 
-func getSessionsToday(db *sql.DB) ([]Session, error) {
-	return getSessions(db, "start BETWEEN NOW() AND CURRENT_DATE() + INTERVAL 1 DAY)")
+func (t *Today) fetchSessions(db *sql.DB) {
+	sessions, err := getSessions(db, "start BETWEEN CONCAT(CURDATE(), ' 00:00:00') AND CONCAT(CURDATE(), ' 23:59:59')")
+	Check(err)
+	t.sessions = sessions
 }
 
-func getSessionsDay(db *sql.DB) ([]Session, error) {
-	return getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
+func (d *Day) fetchSessions(db *sql.DB) {
+	sessions, err := getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
+	Check(err)
+	d.sessions = sessions
 }
 
-func getSessionsWeek(db *sql.DB) ([]Session, error) {
-	return getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
+func (w *Week) fetchSessions(db *sql.DB) {
+	sessions, err := getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
+	Check(err)
+	w.sessions = sessions
 }
 
-func getSessionsMonth(db *sql.DB) ([]Session, error) {
-	return getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
+func (m *Month) fetchSessions(db *sql.DB) {
+	sessions, err := getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
+	Check(err)
+	m.sessions = sessions
 }
 
-func getSessionsYear(db *sql.DB) ([]Session, error) {
-	return getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
+func (y *Year) fetchSessions(db *sql.DB) {
+	sessions, err := getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
+	Check(err)
+	y.sessions = sessions
+}
+
+func basicInfo(sessions []Session) (*widgets.Paragraph, *widgets.Paragraph) {
+	p := widgets.NewParagraph()
+	p.TextStyle = ui.NewStyle(ui.ColorGreen)
+	p.Title = "Sessions"
+	p.Text = fmt.Sprintf("%d", len(sessions))
+	p.PaddingLeft = 2
+	p.SetRect(0, 4, 20, 7)
+
+	p2 := widgets.NewParagraph()
+	duration := totalDuration(sessions)
+	p2.TextStyle = ui.NewStyle(ui.ColorGreen)
+	p2.Title = "Total duration"
+	p2.Text = durafmt.Parse(duration).LimitFirstN(3).String()
+	p2.PaddingLeft = 2
+	p2.SetRect(20, 4, 61, 7)
+
+	return p, p2
+}
+
+func (a *All) buildComponents() {
+	p, p2 := basicInfo(a.sessions)
+
+	bc := widgets.NewBarChart()
+	data := make([]float64, 7)
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
+		now.Location())
+	for _, session := range a.sessions {
+		day := time.Date(session.Start.Year(),
+			session.Start.Month(),
+			session.Start.Day(), 0, 0, 0, 0,
+			session.Start.Location())
+		daysAgo := int(today.Sub(day).Hours() / 24.0)
+		sessionDuration := session.Finish.Sub(session.Start).Minutes()
+		data[6-(daysAgo%7)] += sessionDuration
+	}
+
+	for i, val := range data {
+		data[i] = roundFloat(val, 0)
+	}
+
+	bc.Data = data
+	bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+	bc.Title = "Week average"
+	bc.BarWidth = 7
+	bc.PaddingLeft = 10
+	bc.BarColors = []ui.Color{ui.ColorGreen}
+	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
+	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
+	bc.PaddingTop = 1
+	bc.PaddingLeft = 2
+	bc.PaddingRight = 2
+	bc.SetRect(0, 7, 61, 29)
+
+	components := []ui.Drawable{p, p2, bc}
+	a.components = components
+}
+
+func (t *Today) buildComponents() {
+	p, p2 := basicInfo(t.sessions)
+
+	components := []ui.Drawable{p, p2}
+	t.components = components
+}
+
+func (d *Day) buildComponents() {
+	p, p2 := basicInfo(d.sessions)
+
+	components := []ui.Drawable{p, p2}
+	d.components = components
+}
+
+func (w *Week) buildComponents() {
+	p, p2 := basicInfo(w.sessions)
+
+	bc := widgets.NewBarChart()
+	data := make([]float64, 7)
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
+		now.Location())
+	for _, session := range w.sessions {
+		day := time.Date(session.Start.Year(),
+			session.Start.Month(),
+			session.Start.Day(), 0, 0, 0, 0,
+			session.Start.Location())
+		daysAgo := int(today.Sub(day).Hours() / 24.0)
+		sessionDuration := session.Finish.Sub(session.Start).Minutes()
+		data[6-daysAgo] += sessionDuration
+	}
+
+	for i, val := range data {
+		data[i] = roundFloat(val, 0)
+	}
+
+	bc.Data = data
+	bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+	bc.Title = "Last 7 days"
+	bc.BarWidth = 7
+	bc.PaddingLeft = 10
+	bc.BarColors = []ui.Color{ui.ColorGreen}
+	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
+	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
+	bc.PaddingTop = 1
+	bc.PaddingLeft = 2
+	bc.PaddingRight = 2
+	bc.SetRect(0, 7, 61, 29)
+
+	components := []ui.Drawable{p, p2, bc}
+	w.components = components
+}
+
+func (m *Month) buildComponents() {
+	p, p2 := basicInfo(m.sessions)
+
+	bc := widgets.NewBarChart()
+	data := make([]float64, 7)
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
+		now.Location())
+	for _, session := range m.sessions {
+		day := time.Date(session.Start.Year(),
+			session.Start.Month(),
+			session.Start.Day(), 0, 0, 0, 0,
+			session.Start.Location())
+		daysAgo := int(today.Sub(day).Hours() / 24.0)
+		sessionDuration := session.Finish.Sub(session.Start).Minutes()
+		data[6-(daysAgo%7)] += sessionDuration
+	}
+
+	for i, val := range data {
+		data[i] = roundFloat(val, 0)
+	}
+
+	bc.Data = data
+	bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+	bc.Title = "Week average"
+	bc.BarWidth = 7
+	bc.PaddingLeft = 10
+	bc.BarColors = []ui.Color{ui.ColorGreen}
+	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
+	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
+	bc.PaddingTop = 1
+	bc.PaddingLeft = 2
+	bc.PaddingRight = 2
+	bc.SetRect(0, 7, 61, 29)
+
+	components := []ui.Drawable{p, p2, bc}
+	m.components = components
+}
+
+func (y *Year) buildComponents() {
+	p, p2 := basicInfo(y.sessions)
+
+	bc := widgets.NewBarChart()
+	data := make([]float64, 7)
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
+		now.Location())
+	for _, session := range y.sessions {
+		day := time.Date(session.Start.Year(),
+			session.Start.Month(),
+			session.Start.Day(), 0, 0, 0, 0,
+			session.Start.Location())
+		daysAgo := int(today.Sub(day).Hours() / 24.0)
+		sessionDuration := session.Finish.Sub(session.Start).Minutes()
+		data[6-(daysAgo%7)] += sessionDuration
+	}
+
+	for i, val := range data {
+		data[i] = roundFloat(val, 0)
+	}
+
+	bc.Data = data
+	bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+	bc.Title = "Week average"
+	bc.BarWidth = 7
+	bc.PaddingLeft = 10
+	bc.BarColors = []ui.Color{ui.ColorGreen}
+	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
+	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
+	bc.PaddingTop = 1
+	bc.PaddingLeft = 2
+	bc.PaddingRight = 2
+	bc.SetRect(0, 7, 61, 29)
+
+	components := []ui.Drawable{p, p2, bc}
+	y.components = components
+}
+
+func (a All) render() {
+	for _, component := range a.components {
+		ui.Render(component)
+	}
+}
+
+func (t Today) render() {
+	for _, component := range t.components {
+		ui.Render(component)
+	}
+}
+
+func (d Day) render() {
+	for _, component := range d.components {
+		ui.Render(component)
+	}
+}
+
+func (w Week) render() {
+	for _, component := range w.components {
+		ui.Render(component)
+	}
+}
+
+func (m Month) render() {
+	for _, component := range m.components {
+		ui.Render(component)
+	}
+}
+
+func (y Year) render() {
+	for _, component := range y.components {
+		ui.Render(component)
+	}
+}
+
+type Period interface {
+	fetchSessions(db *sql.DB)
+	buildComponents()
+	render()
+}
+
+type All struct {
+	sessions   []Session
+	components []ui.Drawable
+}
+
+type Today struct {
+	sessions   []Session
+	components []ui.Drawable
+}
+
+type Day struct {
+	sessions   []Session
+	components []ui.Drawable
+}
+
+type Week struct {
+	sessions   []Session
+	components []ui.Drawable
+}
+
+type Month struct {
+	sessions   []Session
+	components []ui.Drawable
+}
+
+type Year struct {
+	sessions   []Session
+	components []ui.Drawable
+}
+
+func buildPages(db *sql.DB) []Period {
+	all := All{}
+	today := Today{}
+	day := Day{}
+	week := Week{}
+	month := Month{}
+	year := Year{}
+	pages := []Period{&all, &today, &day, &week, &month, &year}
+
+	for _, page := range pages {
+		page.fetchSessions(db)
+		page.buildComponents()
+	}
+	return pages
 }
 
 func DisplayStats(db *sql.DB, period string) error {
-	var sessions []Session
-	var err error
-	switch period {
-	case "":
-		fmt.Println("Statistics:")
-		sessions, err = getAllSessions(db)
-	case "today":
-		fmt.Println("Sessions from today:")
-		sessions, err = getSessionsToday(db)
-	case "day":
-		fmt.Println("Sessions from last 24hrs:")
-		sessions, err = getSessionsDay(db)
-	case "week":
-		fmt.Println("Sessions from last week:")
-		sessions, err = getSessionsWeek(db)
-	case "month":
-		fmt.Println("Sessions from last month:")
-		sessions, err = getSessionsMonth(db)
-	case "year":
-		fmt.Println("Sessions from last year:")
-		sessions, err = getSessionsYear(db)
-
-	}
-	if err != nil {
-		log.Printf("Sessions in time range failed with error: %s\n", err)
-		return err
-	}
+	pages := buildPages(db)
 
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
 	}
 	defer ui.Close()
 
-	p := widgets.NewParagraph()
-	duration := totalDuration(sessions)
-	durationStr := displayDurationString(duration, period)
-	p.Border = false
-	p.TextStyle = ui.NewStyle(ui.ColorGreen)
-	p.Text = fmt.Sprintf("%d sessions\n%s", len(sessions), durationStr)
-	p.SetRect(0, 0, 57, 4)
-	ui.Render(p)
+	tabpane := widgets.NewTabPane("All", "Today", "24hrs", "Week", "Month", "Year")
+	tabpane.SetRect(0, 1, 50, 3)
+	tabpane.Border = false
 
-	if period == "week" {
-		bc := widgets.NewBarChart()
-		data := []float64{100.1, 100.1, 100.2, 200.44, 100.1, 100.3, 100.4}
-		now := time.Now()
-		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		for _, session := range sessions {
-			day := time.Date(session.Start.Year(), session.Start.Month(), session.Start.Day(), 0, 0, 0, 0, session.Start.Location())
-			daysAgo := int(today.Sub(day).Hours() / 24.0)
-			sessionDuration := session.Finish.Sub(session.Start).Minutes()
-			data[6-daysAgo] += sessionDuration
-		}
+	signOff := widgets.NewParagraph()
+	signOff.Border = false
+	signOff.Text = "Use arrow keys to switch tabs.\nPress esc to quit."
+	signOff.SetRect(0, 29, 58, 34)
+	ui.Render(signOff)
 
-		for i, val := range data {
-			data[i] = roundFloat(val, 0)
-		}
-
-		bc.Data = data
-		bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
-		bc.Title = "Last 7 days"
-		bc.SetRect(0, 4, 57, 25)
-		bc.BarWidth = 7
-		bc.PaddingLeft = 10
-		bc.BarColors = []ui.Color{ui.ColorGreen}
-		bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
-		bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
-
-		ui.Render(bc)
-	} else if period == "month" || period == "year" {
-		var nDays int
-		if period == "month" {
-			nDays = 30
-		} else if period == "year" {
-			nDays = 365
-		}
-		data := make([]float64, nDays)
-		now := time.Now()
-		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		for _, session := range sessions {
-			day := time.Date(session.Start.Year(), session.Start.Month(), session.Start.Day(), 0, 0, 0, 0, session.Start.Location())
-			daysAgo := int(today.Sub(day).Hours() / 24.0)
-			sessionDuration := session.Finish.Sub(session.Start).Minutes()
-			data[nDays-1-daysAgo] += sessionDuration
-		}
-		graph := asciigraph.Plot(data, asciigraph.Width(60))
-
-		fmt.Printf("\n%s\n\n", graph)
+	renderTab := func() {
+		page := pages[tabpane.ActiveTabIndex]
+		page.render()
 	}
 
-	p = widgets.NewParagraph()
-	p.Border = false
-	p.Text = "Press any key to exit"
-	p.SetRect(0, 25, 57, 28)
-	ui.Render(p)
+	ui.Render(tabpane, signOff)
+	renderTab()
 
-	for e := range ui.PollEvents() {
-		if e.Type == ui.KeyboardEvent {
-			break
+	uiEvents := ui.PollEvents()
+
+	for {
+		e := <-uiEvents
+		switch e.ID {
+		case "q", "<C-c>", "<Escape>":
+			return nil
+		case "<Left>", "p", "l":
+			tabpane.FocusLeft()
+			ui.Clear()
+			ui.Render(tabpane, signOff)
+			renderTab()
+		case "<Right>", "n", "r":
+			tabpane.FocusRight()
+			ui.Clear()
+			ui.Render(tabpane, signOff)
+			renderTab()
 		}
 	}
-
-	return nil
 }

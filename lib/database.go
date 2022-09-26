@@ -292,7 +292,6 @@ func OpenDatabase() (*sql.DB, error) {
 		log.Printf("Error when getting database connection: %s\n", err)
 		return nil, err
 	}
-	defer db.Close()
 
 	err = createTable(db)
 	if err != nil {

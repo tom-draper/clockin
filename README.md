@@ -46,7 +46,7 @@ clockin start homework
 
 ### Finishing a work session
 
-To finish recording a work session, run:
+To finish recording for all currently running work sessions, run:
 
 ```bash
 clockin stop
@@ -56,12 +56,6 @@ You can specify a particular work session by its name identifier:
 
 ```bash
 clockin stop homework
-```
-
-To stop all currently running work sessions, run:
-
-```bash
-clockin stop all
 ```
 
 ### Show running sessions
@@ -86,16 +80,6 @@ A statistical summary of how you've spent your time working can be displayed by 
 
 ```bash
 clockin stats
-```
-
-This summary can be limited to a particular time period:
-
-```bash
-clockin stats today
-clockin stats day
-clockin stats week
-clockin stats month
-clockin stats year
 ```
 
 ### Config
