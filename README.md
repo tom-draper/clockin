@@ -1,5 +1,3 @@
-# Clock In
-
 <p align="center">
 	<img width="550px" src="https://user-images.githubusercontent.com/41476809/192119791-831cec36-dab0-4cb0-afc1-1ba12389475f.png">
 </p>
