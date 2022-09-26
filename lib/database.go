@@ -147,7 +147,7 @@ func ShowTable(db *sql.DB) error {
 }
 
 func StartRecording(db *sql.DB, name string) error {
-	query := "INSERT INTO clockin(name, start, finish) VALUES (?, ?, NULL)"
+	query := "INSERT INTO clockin(name, start, finish) VALUES (?, NOW(), NULL)"
 	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelfunc()
 	stmt, err := db.PrepareContext(ctx, query)
@@ -157,8 +157,8 @@ func StartRecording(db *sql.DB, name string) error {
 	}
 	defer stmt.Close()
 
-	now := time.Now().UTC()
-	_, err = stmt.ExecContext(ctx, name, now)
+	now := time.Now()
+	_, err = stmt.ExecContext(ctx, name)
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s\n", err)
 		return err

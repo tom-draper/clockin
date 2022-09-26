@@ -142,7 +142,40 @@ func (a *All) buildComponents() {
 	bc.PaddingRight = 2
 	bc.SetRect(0, 7, 61, 29)
 
-	components := []ui.Drawable{p, p2, bc}
+	nameTime := make(map[string]float64)
+	for _, session := range a.sessions {
+		if session.Name != "" && !session.Finish.IsZero() {
+			if _, ok := nameTime[session.Name]; !ok {
+				nameTime[session.Name] = 0.0
+			}
+			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
+			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+		}
+	}
+
+	data = []float64{}
+	for name, time := range nameTime {
+		fmt.Println(name, time)
+		data = append(data, time)
+	}
+	for {
+
+	}
+
+	pc := widgets.NewPieChart()
+	pc.Title = "Work session names"
+	pc.Data = data
+	pc.AngleOffset = -.5 * math.Pi
+	pc.PaddingLeft = 1
+	pc.PaddingTop = 1
+	pc.PaddingRight = 1
+	pc.PaddingBottom = 1
+	pc.LabelFormatter = func(i int, v float64) string {
+		return fmt.Sprintf("%.02f", v)
+	}
+	pc.SetRect(61, 4, 112, 29)
+
+	components := []ui.Drawable{p, p2, bc, pc}
 	a.components = components
 }
 
