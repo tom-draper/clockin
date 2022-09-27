@@ -248,6 +248,78 @@ func sessionsList(sessions []Session) *widgets.List {
 	return l
 }
 
+func lastWeek(sessions []Session) *widgets.BarChart {
+	bc := widgets.NewBarChart()
+	data := make([]float64, 7)
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
+		now.Location())
+	for _, session := range sessions {
+		if !session.Finish.IsZero() {
+			day := time.Date(session.Start.Year(),
+				session.Start.Month(),
+				session.Start.Day(), 0, 0, 0, 0,
+				session.Start.Location())
+			daysAgo := int(today.Sub(day).Hours() / 24.0)
+			sessionDuration := session.Finish.Sub(session.Start).Minutes()
+			data[6-daysAgo] += sessionDuration
+		}
+	}
+
+	for i, val := range data {
+		data[i] = roundFloat(val, 0)
+	}
+
+	labels := make([]string, 7)
+	for i := 0; i < 7; i++ {
+		weekday := now.Add(-time.Duration((6-i)*24) * time.Hour).Weekday().String()
+		labels[i] = weekday[:3]
+	}
+
+	bc.Data = data
+
+	bc.Labels = labels
+	bc.Title = "Last 7 days"
+	bc.BarWidth = 7
+	bc.PaddingLeft = 10
+	bc.BarColors = []ui.Color{ui.ColorGreen}
+	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
+	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
+	bc.PaddingTop = 1
+	bc.PaddingLeft = 2
+	bc.PaddingRight = 2
+	bc.SetRect(0, 10, 61, 29)
+
+	return bc
+}
+
+func shiftedSlice(slice []float64, amount int) []float64 {
+	shifted := make([]float64, len(slice))
+	for i, val := range slice {
+		idx := (i + amount) % len(slice)
+		shifted[idx] = val
+	}
+	return shifted
+}
+
+func shiftData(data []float64, now time.Time) []float64 {
+	switch now.Weekday().String() {
+	case "Monday":
+		return shiftedSlice(data, 1)
+	case "Tuesday":
+		return shiftedSlice(data, 2)
+	case "Wednesday":
+		return shiftedSlice(data, 3)
+	case "Thursday":
+		return shiftedSlice(data, 4)
+	case "Friday":
+		return shiftedSlice(data, 5)
+	case "Saturday":
+		return shiftedSlice(data, 6)
+	}
+	return data
+}
+
 func weekAverage(sessions []Session) *widgets.BarChart {
 	bc := widgets.NewBarChart()
 	data := make([]float64, 7)
@@ -269,6 +341,9 @@ func weekAverage(sessions []Session) *widgets.BarChart {
 	for i, val := range data {
 		data[i] = roundFloat(val, 0)
 	}
+
+	// Circular shift data to make sure today's day is the final element to match labels
+	data = shiftData(data, now)
 
 	bc.Data = data
 	bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
@@ -347,7 +422,7 @@ func (d *Day) buildComponents() {
 func (w *Week) buildComponents() {
 	p, p2, p3 := basicInfo(w.sessions)
 
-	bc := weekAverage(w.sessions)
+	bc := lastWeek(w.sessions)
 
 	nameTime := make(map[string]float64)
 	for _, session := range w.sessions {
@@ -621,10 +696,12 @@ func DisplayStats(db *sql.DB) error {
 			ui.Render(tabpane, signOff)
 			renderTab()
 		case "j", "<Down>":
+			// If on Today or Day page (containing list)
 			if tabpane.ActiveTabIndex == 1 || tabpane.ActiveTabIndex == 2 {
 				pages[tabpane.ActiveTabIndex].scroll("down")
 			}
 		case "k", "<Up>":
+			// If on Today or Day page (containing list)
 			if tabpane.ActiveTabIndex == 1 || tabpane.ActiveTabIndex == 2 {
 				pages[tabpane.ActiveTabIndex].scroll("up")
 			}

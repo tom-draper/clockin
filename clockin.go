@@ -26,10 +26,6 @@ func getAdditionalOption() string {
 	return option
 }
 
-func checkValidTime(time string) bool {
-	return time == "" || time == "today" || time == "day" || time == "week" || time == "month" || time == "year"
-}
-
 func DisplayUsage() {
 	fmt.Printf("clockin is a tool for recording work time.\n\nUsage:\n\n        clockin <command>\n\n        MySQL installation is required.\n\nThe commands are:\n\n        start          start timing a new work session\n        start <name>   start timing a new work session with an assigned name\n        finish         finish timing all currently running work sessions\n        finish <name>  finish timing a running work session, specified by its assigned name\n        running        list all currently running work sessions\n        stats          open statistics page\n        reset          delete all stored data\n")
 }
