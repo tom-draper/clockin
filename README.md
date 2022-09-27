@@ -61,7 +61,7 @@ clockin stop homework
 To list all currently running work sessions, run:
 
 ```bash
-clockin status
+clockin running
 ```
 
 ### Reset data

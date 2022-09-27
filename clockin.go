@@ -42,13 +42,13 @@ func main() {
 	command := getCommand()
 	switch command {
 	case "start", "starting", "go":
-		RemindCurrentSessions(db)
 		name := getAdditionalOption()
 		err := StartRecording(db, name)
 		if err != nil {
 			log.Printf("Start recording failed with error: %s\n", err)
 			return
 		}
+		RemindCurrentSessions(db, 1)
 	case "finish", "finished", "end", "stop", "halt":
 		name := getAdditionalOption()
 		err := FinishRecording(db, name)
@@ -56,6 +56,7 @@ func main() {
 			log.Printf("Finish recording failed with error: %s\n", err)
 			return
 		}
+		RemindCurrentSessions(db, 0)
 	case "reset":
 		err := Reset(db)
 		if err != nil {
@@ -63,7 +64,6 @@ func main() {
 			return
 		}
 	case "status", "info", "running":
-		RemindCurrentSessions(db)
 		err := Status(db)
 		if err != nil {
 			log.Printf("Data reset failed with error: %s\n", err)

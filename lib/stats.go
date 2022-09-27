@@ -238,6 +238,7 @@ func sessionsList(sessions []Session) *widgets.List {
 	l.PaddingLeft = 2
 	l.PaddingRight = 2
 	l.PaddingTop = 1
+	l.PaddingBottom = 1
 	l.WrapText = true
 	// l.TextStyle = ui.NewStyle(ui.ColorYellow)
 	l.SetRect(0, 10, 61, 29)
@@ -314,6 +315,7 @@ func (t *Today) buildComponents() {
 	components := []ui.Drawable{p, p2, p3, pc, l}
 	components = append(components, pcLabels...)
 	t.components = components
+	t.list = l
 }
 
 func (d *Day) buildComponents() {
@@ -336,6 +338,7 @@ func (d *Day) buildComponents() {
 	components := []ui.Drawable{p, p2, p3, pc, l}
 	components = append(components, pcLabels...)
 	d.components = components
+	d.list = l
 }
 
 func (w *Week) buildComponents() {
@@ -404,6 +407,78 @@ func (y *Year) buildComponents() {
 	y.components = components
 }
 
+func (a All) scroll(direction string) {
+	if a.list != nil {
+		if direction == "up" {
+			a.list.ScrollPageUp()
+			ui.Render(a.list)
+		} else if direction == "down" {
+			a.list.ScrollPageDown()
+			ui.Render(a.list)
+		}
+	}
+}
+
+func (t Today) scroll(direction string) {
+	if t.list != nil {
+		if direction == "up" {
+			t.list.ScrollPageUp()
+			ui.Render(t.list)
+		} else if direction == "down" {
+			t.list.ScrollPageDown()
+			ui.Render(t.list)
+		}
+	}
+}
+
+func (d Day) scroll(direction string) {
+	if d.list != nil {
+		if direction == "up" {
+			d.list.ScrollPageUp()
+			ui.Render(d.list)
+		} else if direction == "down" {
+			d.list.ScrollPageDown()
+			ui.Render(d.list)
+		}
+	}
+}
+
+func (w Week) scroll(direction string) {
+	if w.list != nil {
+		if direction == "up" {
+			w.list.ScrollPageUp()
+			ui.Render(w.list)
+		} else if direction == "down" {
+			w.list.ScrollPageDown()
+			ui.Render(w.list)
+		}
+	}
+}
+
+func (m Month) scroll(direction string) {
+	if m.list != nil {
+		if direction == "up" {
+			m.list.ScrollPageUp()
+			ui.Render(m.list)
+		} else if direction == "down" {
+			m.list.ScrollPageDown()
+			ui.Render(m.list)
+		}
+	}
+}
+
+func (y Year) scroll(direction string) {
+	if y.list != nil {
+		if direction == "up" {
+			y.list.ScrollPageUp()
+			ui.Render(y.list)
+		} else if direction == "down" {
+			y.list.ScrollPageDown()
+			ui.Render(y.list)
+		}
+	}
+}
+
 func (a All) render() {
 	for _, component := range a.components {
 		ui.Render(component)
@@ -440,50 +515,57 @@ func (y Year) render() {
 	}
 }
 
-type Period interface {
+type Page interface {
 	fetchSessions(db *sql.DB)
 	buildComponents()
+	scroll(direction string)
 	render()
 }
 
 type All struct {
 	sessions   []Session
 	components []ui.Drawable
+	list       *widgets.List
 }
 
 type Today struct {
 	sessions   []Session
 	components []ui.Drawable
+	list       *widgets.List
 }
 
 type Day struct {
 	sessions   []Session
 	components []ui.Drawable
+	list       *widgets.List
 }
 
 type Week struct {
 	sessions   []Session
 	components []ui.Drawable
+	list       *widgets.List
 }
 
 type Month struct {
 	sessions   []Session
 	components []ui.Drawable
+	list       *widgets.List
 }
 
 type Year struct {
 	sessions   []Session
 	components []ui.Drawable
+	list       *widgets.List
 }
 
-func buildPages(db *sql.DB) []Period {
+func buildPages(db *sql.DB) []Page {
 	all := All{}
 	today := Today{}
 	day := Day{}
 	week := Week{}
 	month := Month{}
 	year := Year{}
-	pages := []Period{&all, &today, &day, &week, &month, &year}
+	pages := []Page{&all, &today, &day, &week, &month, &year}
 
 	for _, page := range pages {
 		page.fetchSessions(db)
@@ -535,6 +617,15 @@ func DisplayStats(db *sql.DB, period string) error {
 			ui.Clear()
 			ui.Render(tabpane, signOff)
 			renderTab()
+		case "j", "<Down>":
+			if tabpane.ActiveTabIndex == 1 || tabpane.ActiveTabIndex == 2 {
+				pages[tabpane.ActiveTabIndex].scroll("down")
+			}
+		case "k", "<Up>":
+			fmt.Println("up")
+			if tabpane.ActiveTabIndex == 1 || tabpane.ActiveTabIndex == 2 {
+				pages[tabpane.ActiveTabIndex].scroll("up")
+			}
 		}
 	}
 }

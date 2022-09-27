@@ -18,37 +18,36 @@ const (
 	dbname   = "clockin"
 )
 
-func getDBLoginDetails() (string, string) {
+func getDBLoginDetails() (string, string, bool) {
 	err := godotenv.Load(".env")
 	if err != nil {
 		fmt.Println(color.Ize(color.Red, "Error loading variables from .env file"))
 	}
+	fromEnv := true
 	username := os.Getenv("MYSQL_USERNAME")
 	password := os.Getenv("MYSQL_PASSWORD")
 	if username == "" || password == "" {
-		fmt.Printf("Enter MySQL username: ")
+		fmt.Println(color.Ize(color.Yellow, "MySQL login details required"))
+		fmt.Printf("Enter username: ")
 		fmt.Scanln(&username)
-		fmt.Printf("Enter MySQL password: ")
+		fmt.Printf("Enter password: ")
 		fmt.Scanln(&password)
-
-		// Save to .env file (overwrite any existing)
-		f, err := os.Create("./.env")
-		Check(err)
-		defer f.Close()
-		_, err = fmt.Fprintf(f, "MYSQL_USERNAME=%s\nMYSQL_PASSWORD=%s", username, password)
-		Check(err)
+		fromEnv = false
 	}
 
-	return username, password
+	return username, password, fromEnv
 }
 
 func printCurrentSession(session Session) {
-	duration := color.Ize(color.Green, durafmt.Parse(time.Since(session.Start)).LimitFirstN(2).String())
+	now, err := time.Parse("2006-01-02 15:04:05", time.Now().Format("2006-01-02 15:04:05"))
+	Check(err)
+	duration := now.Sub(session.Start)
+	durationStr := color.Ize(color.Green, durafmt.Parse(duration).LimitFirstN(2).String())
 
 	if session.Name == "" {
-		fmt.Printf("[%d] running for %s\n", session.ID, duration)
+		fmt.Printf("[%d] running for %s\n", session.ID, durationStr)
 	} else {
-		fmt.Printf("[%d - %s] running for %s\n", session.ID, session.Name, duration)
+		fmt.Printf("[%d - %s] running for %s\n", session.ID, session.Name, durationStr)
 	}
 }
 
@@ -59,7 +58,7 @@ func Status(db *sql.DB) error {
 	}
 
 	if len(sessions) == 0 {
-		fmt.Println("No sessions currently running.")
+		fmt.Println(color.Ize(color.Green, "No sessions currently running"))
 	} else {
 		for _, session := range sessions {
 			printCurrentSession(session)
@@ -157,13 +156,13 @@ func StartRecording(db *sql.DB, name string) error {
 	}
 	defer stmt.Close()
 
-	now := time.Now()
 	_, err = stmt.ExecContext(ctx, name)
 	if err != nil {
 		log.Printf("Error when inserting row into products table: %s\n", err)
 		return err
 	}
 
+	now := time.Now().Format("2006-01-02 15:04:05")
 	if name == "" {
 		fmt.Printf(color.Ize(color.Green, "Started recording (%s)\n"), now)
 	} else {
@@ -251,7 +250,7 @@ func rowCount(rows *sql.Rows) int {
 	return count
 }
 
-func numActiveSessions(db *sql.DB) (int, error) {
+func NumActiveSessions(db *sql.DB) (int, error) {
 	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
 	if err != nil {
 		log.Printf("Finding number of active sessions failed with error: %s\n", err)
@@ -262,14 +261,17 @@ func numActiveSessions(db *sql.DB) (int, error) {
 	return count, nil
 }
 
-func RemindCurrentSessions(db *sql.DB) {
-	n, err := numActiveSessions(db)
+func RemindCurrentSessions(db *sql.DB, numIgnore int) {
+	n, err := NumActiveSessions(db)
 	if err != nil {
 		log.Printf("Getting number of current sessions failed with error: %s", err)
 		return
 	}
-	if n > 1 {
+	n -= numIgnore
+	if n == 1 {
 		fmt.Println(color.Ize(color.Yellow, "Reminder: Session currently running"))
+	} else if n > 1 {
+		fmt.Printf(color.Ize(color.Yellow, "Reminder: %d sessions currently running"), n-1)
 	}
 }
 
@@ -285,12 +287,22 @@ func currentSessions(db *sql.DB) ([]Session, error) {
 }
 
 func OpenDatabase() (*sql.DB, error) {
-	username, password := getDBLoginDetails()
+	username, password, fromEnv := getDBLoginDetails()
 
 	db, err := dbConnection(username, password)
 	if err != nil {
 		log.Printf("Error when getting database connection: %s\n", err)
 		return nil, err
+	}
+
+	if !fromEnv {
+		fmt.Println("Login successful")
+		// Save details to .env file (overwrite any existing)
+		f, err := os.Create("./.env")
+		Check(err)
+		defer f.Close()
+		_, err = fmt.Fprintf(f, "MYSQL_USERNAME=%s\nMYSQL_PASSWORD=%s", username, password)
+		Check(err)
 	}
 
 	err = createTable(db)
