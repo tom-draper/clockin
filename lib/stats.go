@@ -577,7 +577,7 @@ func buildPages(db *sql.DB) []Page {
 	return pages
 }
 
-func DisplayStats(db *sql.DB, period string) error {
+func DisplayStats(db *sql.DB) error {
 	pages := buildPages(db)
 
 	if err := ui.Init(); err != nil {

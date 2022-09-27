@@ -5,8 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/TwiN/go-color"
-
 	. "clockin/lib"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -30,6 +28,10 @@ func getAdditionalOption() string {
 
 func checkValidTime(time string) bool {
 	return time == "" || time == "today" || time == "day" || time == "week" || time == "month" || time == "year"
+}
+
+func DisplayUsage() {
+	fmt.Printf("clockin is a tool for recording work time.\n\nUsage:\n\n        clockin <command>\n\n        MySQL installation is required.\n\nThe commands are:\n\n        start          start timing a new work session\n        start <name>   start timing a new work session with an assigned name\n        finish         finish timing all currently running work sessions\n        finish <name>  finish timing a running work session, specified by its assigned name\n        running        list all currently running work sessions\n        stats          open statistics page\n        reset          delete all stored data\n")
 }
 
 func main() {
@@ -63,24 +65,23 @@ func main() {
 			return
 		}
 	case "status", "info", "running":
-		err := Status(db)
+		err := DisplayStatus(db)
 		if err != nil {
 			log.Printf("Data reset failed with error: %s\n", err)
 			return
 		}
 	case "stats", "statistics":
-		time := getAdditionalOption()
-		if !checkValidTime(time) {
-			fmt.Println(color.Ize(color.Red, "Error: Statistics time range invalid"))
-			return
-		}
-		err := DisplayStats(db, time)
+		err := DisplayStats(db)
 		if err != nil {
 			log.Printf("Display stats failed with error: %s\n", err)
 			return
 		}
+	case "", "help":
+		DisplayUsage()
 	case "show":
 		ShowTable(db)
+	default:
+		fmt.Printf("clockin %s: unknown command\nRun 'clockin help' for usage", command)
 	}
 
 }

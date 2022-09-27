@@ -45,7 +45,7 @@ func printCurrentSession(session Session) {
 	}
 }
 
-func Status(db *sql.DB) error {
+func DisplayStatus(db *sql.DB) error {
 	sessions, err := currentSessions(db)
 	if err != nil {
 		return err
