@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sort"
 	"time"
 
 	ui "github.com/gizak/termui/v3"
@@ -20,8 +21,10 @@ func roundFloat(val float64, precision uint) float64 {
 func totalDuration(sessions []Session) time.Duration {
 	var totalDuration time.Duration
 	for _, session := range sessions {
-		duration := session.Finish.Sub(session.Start)
-		totalDuration += duration
+		if !session.Finish.IsZero() {
+			duration := session.Finish.Sub(session.Start)
+			totalDuration += duration
+		}
 	}
 	return totalDuration
 }
@@ -36,14 +39,18 @@ func ExtractSessions(rows *sql.Rows) []Session {
 	return sessions
 }
 
-func getSessions(db *sql.DB, sqlDateRange string) ([]Session, error) {
-	var rows *sql.Rows
-	var err error
-	if sqlDateRange == "" {
-		rows, err = db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL")
-	} else {
-		rows, err = db.Query("SELECT * FROM clockin WHERE FINISH IS NOT NULL AND " + sqlDateRange)
+func getSessions(db *sql.DB, includeActive bool, sqlDateRange string) ([]Session, error) {
+	query := "SELECT * FROM clockin"
+	if !includeActive {
+		query += " WHERE FINISH IS NOT NULL"
+		if sqlDateRange != "" {
+			query += " AND " + sqlDateRange
+		}
+	} else if sqlDateRange != "" {
+		query += " WHERE " + sqlDateRange
 	}
+
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -53,64 +60,102 @@ func getSessions(db *sql.DB, sqlDateRange string) ([]Session, error) {
 }
 
 func (a *All) fetchSessions(db *sql.DB) {
-	sessions, err := getSessions(db, "")
+	sessions, err := getSessions(db, true, "")
 	Check(err)
 	a.sessions = sessions
 }
 
 func (t *Today) fetchSessions(db *sql.DB) {
-	sessions, err := getSessions(db, "start BETWEEN CONCAT(CURDATE(), ' 00:00:00') AND CONCAT(CURDATE(), ' 23:59:59')")
+	sessions, err := getSessions(db, true, "start BETWEEN CONCAT(CURDATE(), ' 00:00:00') AND CONCAT(CURDATE(), ' 23:59:59')")
 	Check(err)
 	t.sessions = sessions
 }
 
 func (d *Day) fetchSessions(db *sql.DB) {
-	sessions, err := getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
+	sessions, err := getSessions(db, true, "start >= DATE_SUB(NOW(), INTERVAL 1 DAY)")
 	Check(err)
 	d.sessions = sessions
 }
 
 func (w *Week) fetchSessions(db *sql.DB) {
-	sessions, err := getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
+	sessions, err := getSessions(db, true, "start >= DATE_SUB(NOW(), INTERVAL 1 WEEK)")
 	Check(err)
 	w.sessions = sessions
 }
 
 func (m *Month) fetchSessions(db *sql.DB) {
-	sessions, err := getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
+	sessions, err := getSessions(db, true, "start >= DATE_SUB(NOW(), INTERVAL 1 MONTH)")
 	Check(err)
 	m.sessions = sessions
 }
 
 func (y *Year) fetchSessions(db *sql.DB) {
-	sessions, err := getSessions(db, "start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
+	sessions, err := getSessions(db, true, "start >= DATE_SUB(NOW(), INTERVAL 1 YEAR)")
 	Check(err)
 	y.sessions = sessions
 }
 
-func basicInfo(sessions []Session) (*widgets.Paragraph, *widgets.Paragraph) {
+func numActive(sessions []Session) int {
+	count := 0
+	for _, session := range sessions {
+		if session.Finish.IsZero() {
+			count++
+		}
+	}
+	return count
+}
+
+func basicInfo(sessions []Session) (*widgets.Paragraph, *widgets.Paragraph,
+	*widgets.Paragraph) {
 	p := widgets.NewParagraph()
+	duration := totalDuration(sessions)
 	p.TextStyle = ui.NewStyle(ui.ColorGreen)
-	p.Title = "Sessions"
-	p.Text = fmt.Sprintf("%d", len(sessions))
+	p.Title = "Total duration"
+	p.Text = durafmt.Parse(duration).LimitFirstN(3).String()
 	p.PaddingLeft = 2
-	p.SetRect(0, 4, 15, 7)
+	p.SetRect(0, 4, 61, 7)
 
 	p2 := widgets.NewParagraph()
-	duration := totalDuration(sessions)
 	p2.TextStyle = ui.NewStyle(ui.ColorGreen)
-	p2.Title = "Total duration"
-	p2.Text = durafmt.Parse(duration).LimitFirstN(3).String()
+	p2.Title = "Completed"
+	p2.Text = fmt.Sprintf("%d", len(sessions))
 	p2.PaddingLeft = 2
-	p2.SetRect(15, 4, 61, 7)
+	p2.SetRect(0, 7, 30, 10)
 
-	return p, p2
+	p3 := widgets.NewParagraph()
+	p3.TextStyle = ui.NewStyle(ui.ColorYellow)
+	p3.Title = "Active"
+	p3.Text = fmt.Sprintf("%d", numActive(sessions))
+	p3.PaddingLeft = 2
+	p3.SetRect(30, 7, 61, 10)
+
+	return p, p2, p3
+}
+
+type PieChartData struct {
+	data   []float64
+	labels []string
+}
+
+type SortByOther PieChartData
+
+func (sbo SortByOther) Len() int {
+	return len(sbo.data)
+}
+
+func (sbo SortByOther) Swap(i, j int) {
+	sbo.data[i], sbo.data[j] = sbo.data[j], sbo.data[i]
+	sbo.labels[i], sbo.labels[j] = sbo.labels[j], sbo.labels[i]
+}
+
+func (sbo SortByOther) Less(i, j int) bool {
+	return sbo.data[i] > sbo.data[j]
 }
 
 func nameProportions(sessions []Session) (*widgets.PieChart, []ui.Drawable) {
 	nameTime := make(map[string]float64)
 	for _, session := range sessions {
-		if session.Name != "" && !session.Finish.IsZero() {
+		if !session.Finish.IsZero() {
 			if _, ok := nameTime[session.Name]; !ok {
 				nameTime[session.Name] = 0.0
 			}
@@ -118,7 +163,8 @@ func nameProportions(sessions []Session) (*widgets.PieChart, []ui.Drawable) {
 		}
 	}
 
-	colors := []ui.Color{ui.ColorRed, ui.ColorGreen, ui.ColorYellow, ui.ColorBlue, ui.ColorCyan, ui.ColorMagenta}
+	colors := []ui.Color{ui.ColorRed, ui.ColorGreen, ui.ColorYellow,
+		ui.ColorBlue, ui.ColorCyan, ui.ColorMagenta}
 
 	labels := []string{}
 	data := []float64{}
@@ -129,7 +175,7 @@ func nameProportions(sessions []Session) (*widgets.PieChart, []ui.Drawable) {
 			time *= -1
 		}
 		if i > 5 {
-			data[numColors] += time
+			data[numColors-1] += time
 		} else {
 			data = append(data, time)
 			labels = append(labels, name)
@@ -137,12 +183,15 @@ func nameProportions(sessions []Session) (*widgets.PieChart, []ui.Drawable) {
 		i++
 	}
 	if len(nameTime) > numColors {
-		labels[numColors] = "Other"
+		labels[numColors-1] = "Other"
 	}
+
+	pcData := PieChartData{data: data, labels: labels}
+	sort.Sort(SortByOther(pcData))
 
 	pc := widgets.NewPieChart()
 	pc.Title = "Session names"
-	pc.Data = data
+	pc.Data = pcData.data
 	pc.AngleOffset = -.5 * math.Pi
 	pc.PaddingLeft = 1
 	pc.PaddingTop = 2
@@ -154,8 +203,8 @@ func nameProportions(sessions []Session) (*widgets.PieChart, []ui.Drawable) {
 	}
 	pc.SetRect(61, 4, 112, 29)
 
-	labelComponents := make([]ui.Drawable, len(labels))
-	for i, name := range labels {
+	labelComponents := make([]ui.Drawable, len(pcData.labels))
+	for i, name := range pcData.labels {
 		p := widgets.NewParagraph()
 		p.TextStyle = ui.NewStyle(ui.ColorGreen)
 		p.Border = false
@@ -172,106 +221,45 @@ func nameProportions(sessions []Session) (*widgets.PieChart, []ui.Drawable) {
 	return pc, labelComponents
 }
 
-func (a *All) buildComponents() {
-	p, p2 := basicInfo(a.sessions)
+func sessionsList(sessions []Session) *widgets.List {
+	l := widgets.NewList()
+	l.Title = "Sessions"
+	rows := []string{}
+	for _, session := range sessions {
+		name := "none"
+		if session.Name != "" {
+			name = session.Name
+		}
+		duration := totalDuration(sessions)
+		rows = append(rows, fmt.Sprintf("[%d] %s - %s", session.ID, name,
+			durafmt.Parse(duration).LimitFirstN(3).String()))
+	}
+	l.Rows = rows
+	l.PaddingLeft = 2
+	l.PaddingRight = 2
+	l.PaddingTop = 1
+	l.WrapText = true
+	// l.TextStyle = ui.NewStyle(ui.ColorYellow)
+	l.SetRect(0, 10, 61, 29)
+	return l
+}
 
+func weekAverage(sessions []Session) *widgets.BarChart {
 	bc := widgets.NewBarChart()
 	data := make([]float64, 7)
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
 		now.Location())
-	for _, session := range a.sessions {
-		day := time.Date(session.Start.Year(),
-			session.Start.Month(),
-			session.Start.Day(), 0, 0, 0, 0,
-			session.Start.Location())
-		daysAgo := int(today.Sub(day).Hours() / 24.0)
-		sessionDuration := session.Finish.Sub(session.Start).Minutes()
-		data[6-(daysAgo%7)] += sessionDuration
-	}
-
-	for i, val := range data {
-		data[i] = roundFloat(val, 0)
-	}
-
-	bc.Data = data
-	bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
-	bc.Title = "Week average"
-	bc.BarWidth = 7
-	bc.PaddingLeft = 10
-	bc.BarColors = []ui.Color{ui.ColorGreen}
-	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
-	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
-	bc.PaddingTop = 1
-	bc.PaddingLeft = 2
-	bc.PaddingRight = 2
-	bc.SetRect(0, 7, 61, 29)
-
-	pc, pcLabels := nameProportions(a.sessions)
-
-	components := []ui.Drawable{p, p2, bc, pc}
-	components = append(components, pcLabels...)
-	a.components = components
-}
-
-func (t *Today) buildComponents() {
-	p, p2 := basicInfo(t.sessions)
-
-	nameTime := make(map[string]float64)
-	for _, session := range t.sessions {
-		if session.Name != "" && !session.Finish.IsZero() {
-			if _, ok := nameTime[session.Name]; !ok {
-				nameTime[session.Name] = 0.0
-			}
-			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
-			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+	for _, session := range sessions {
+		if !session.Finish.IsZero() {
+			day := time.Date(session.Start.Year(),
+				session.Start.Month(),
+				session.Start.Day(), 0, 0, 0, 0,
+				session.Start.Location())
+			daysAgo := int(today.Sub(day).Hours() / 24.0)
+			sessionDuration := session.Finish.Sub(session.Start).Minutes()
+			data[6-daysAgo] += sessionDuration
 		}
-	}
-
-	pc, pcLabels := nameProportions(t.sessions)
-
-	components := []ui.Drawable{p, p2, pc}
-	components = append(components, pcLabels...)
-	t.components = components
-}
-
-func (d *Day) buildComponents() {
-	p, p2 := basicInfo(d.sessions)
-
-	nameTime := make(map[string]float64)
-	for _, session := range d.sessions {
-		if session.Name != "" && !session.Finish.IsZero() {
-			if _, ok := nameTime[session.Name]; !ok {
-				nameTime[session.Name] = 0.0
-			}
-			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
-			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
-		}
-	}
-
-	pc, pcLabels := nameProportions(d.sessions)
-
-	components := []ui.Drawable{p, p2, pc}
-	components = append(components, pcLabels...)
-	d.components = components
-}
-
-func (w *Week) buildComponents() {
-	p, p2 := basicInfo(w.sessions)
-
-	bc := widgets.NewBarChart()
-	data := make([]float64, 7)
-	now := time.Now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
-		now.Location())
-	for _, session := range w.sessions {
-		day := time.Date(session.Start.Year(),
-			session.Start.Month(),
-			session.Start.Day(), 0, 0, 0, 0,
-			session.Start.Location())
-		daysAgo := int(today.Sub(day).Hours() / 24.0)
-		sessionDuration := session.Finish.Sub(session.Start).Minutes()
-		data[6-daysAgo] += sessionDuration
 	}
 
 	for i, val := range data {
@@ -289,7 +277,71 @@ func (w *Week) buildComponents() {
 	bc.PaddingTop = 1
 	bc.PaddingLeft = 2
 	bc.PaddingRight = 2
-	bc.SetRect(0, 7, 61, 29)
+	bc.SetRect(0, 10, 61, 29)
+
+	return bc
+}
+
+func (a *All) buildComponents() {
+	p, p2, p3 := basicInfo(a.sessions)
+
+	bc := weekAverage(a.sessions)
+
+	pc, pcLabels := nameProportions(a.sessions)
+
+	components := []ui.Drawable{p, p2, p3, bc, pc}
+	components = append(components, pcLabels...)
+	a.components = components
+}
+
+func (t *Today) buildComponents() {
+	p, p2, p3 := basicInfo(t.sessions)
+
+	nameTime := make(map[string]float64)
+	for _, session := range t.sessions {
+		if session.Name != "" && !session.Finish.IsZero() {
+			if _, ok := nameTime[session.Name]; !ok {
+				nameTime[session.Name] = 0.0
+			}
+			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+		}
+	}
+
+	l := sessionsList(t.sessions)
+
+	pc, pcLabels := nameProportions(t.sessions)
+
+	components := []ui.Drawable{p, p2, p3, pc, l}
+	components = append(components, pcLabels...)
+	t.components = components
+}
+
+func (d *Day) buildComponents() {
+	p, p2, p3 := basicInfo(d.sessions)
+
+	nameTime := make(map[string]float64)
+	for _, session := range d.sessions {
+		if session.Name != "" && !session.Finish.IsZero() {
+			if _, ok := nameTime[session.Name]; !ok {
+				nameTime[session.Name] = 0.0
+			}
+			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
+		}
+	}
+
+	l := sessionsList(d.sessions)
+
+	pc, pcLabels := nameProportions(d.sessions)
+
+	components := []ui.Drawable{p, p2, p3, pc, l}
+	components = append(components, pcLabels...)
+	d.components = components
+}
+
+func (w *Week) buildComponents() {
+	p, p2, p3 := basicInfo(w.sessions)
+
+	bc := weekAverage(w.sessions)
 
 	nameTime := make(map[string]float64)
 	for _, session := range w.sessions {
@@ -297,52 +349,21 @@ func (w *Week) buildComponents() {
 			if _, ok := nameTime[session.Name]; !ok {
 				nameTime[session.Name] = 0.0
 			}
-			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
 			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
 		}
 	}
 
 	pc, pcLabels := nameProportions(w.sessions)
 
-	components := []ui.Drawable{p, p2, bc, pc}
+	components := []ui.Drawable{p, p2, p3, bc, pc}
 	components = append(components, pcLabels...)
 	w.components = components
 }
 
 func (m *Month) buildComponents() {
-	p, p2 := basicInfo(m.sessions)
+	p, p2, p3 := basicInfo(m.sessions)
 
-	bc := widgets.NewBarChart()
-	data := make([]float64, 7)
-	now := time.Now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
-		now.Location())
-	for _, session := range m.sessions {
-		day := time.Date(session.Start.Year(),
-			session.Start.Month(),
-			session.Start.Day(), 0, 0, 0, 0,
-			session.Start.Location())
-		daysAgo := int(today.Sub(day).Hours() / 24.0)
-		sessionDuration := session.Finish.Sub(session.Start).Minutes()
-		data[6-(daysAgo%7)] += sessionDuration
-	}
-
-	for i, val := range data {
-		data[i] = roundFloat(val, 0)
-	}
-
-	bc.Data = data
-	bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
-	bc.Title = "Week average"
-	bc.BarWidth = 7
-	bc.PaddingLeft = 10
-	bc.BarColors = []ui.Color{ui.ColorGreen}
-	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
-	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
-	bc.PaddingTop = 1
-	bc.PaddingLeft = 2
-	bc.PaddingRight = 2
-	bc.SetRect(0, 7, 61, 29)
+	bc := weekAverage(m.sessions)
 
 	nameTime := make(map[string]float64)
 	for _, session := range m.sessions {
@@ -350,52 +371,21 @@ func (m *Month) buildComponents() {
 			if _, ok := nameTime[session.Name]; !ok {
 				nameTime[session.Name] = 0.0
 			}
-			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
 			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
 		}
 	}
 
 	pc, pcLabels := nameProportions(m.sessions)
 
-	components := []ui.Drawable{p, p2, bc, pc}
+	components := []ui.Drawable{p, p2, p3, bc, pc}
 	components = append(components, pcLabels...)
 	m.components = components
 }
 
 func (y *Year) buildComponents() {
-	p, p2 := basicInfo(y.sessions)
+	p, p2, p3 := basicInfo(y.sessions)
 
-	bc := widgets.NewBarChart()
-	data := make([]float64, 7)
-	now := time.Now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0,
-		now.Location())
-	for _, session := range y.sessions {
-		day := time.Date(session.Start.Year(),
-			session.Start.Month(),
-			session.Start.Day(), 0, 0, 0, 0,
-			session.Start.Location())
-		daysAgo := int(today.Sub(day).Hours() / 24.0)
-		sessionDuration := session.Finish.Sub(session.Start).Minutes()
-		data[6-(daysAgo%7)] += sessionDuration
-	}
-
-	for i, val := range data {
-		data[i] = roundFloat(val, 0)
-	}
-
-	bc.Data = data
-	bc.Labels = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
-	bc.Title = "Week average"
-	bc.BarWidth = 7
-	bc.PaddingLeft = 10
-	bc.BarColors = []ui.Color{ui.ColorGreen}
-	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
-	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorYellow)}
-	bc.PaddingTop = 1
-	bc.PaddingLeft = 2
-	bc.PaddingRight = 2
-	bc.SetRect(0, 7, 61, 29)
+	bc := weekAverage(y.sessions)
 
 	nameTime := make(map[string]float64)
 	for _, session := range y.sessions {
@@ -403,14 +393,13 @@ func (y *Year) buildComponents() {
 			if _, ok := nameTime[session.Name]; !ok {
 				nameTime[session.Name] = 0.0
 			}
-			fmt.Println(session.Name, session.Finish.Sub(session.Start).Minutes())
 			nameTime[session.Name] += session.Finish.Sub(session.Start).Minutes()
 		}
 	}
 
 	pc, pcLabels := nameProportions(y.sessions)
 
-	components := []ui.Drawable{p, p2, bc, pc}
+	components := []ui.Drawable{p, p2, p3, bc, pc}
 	components = append(components, pcLabels...)
 	y.components = components
 }

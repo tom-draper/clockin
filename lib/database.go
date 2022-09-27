@@ -251,10 +251,10 @@ func rowCount(rows *sql.Rows) int {
 	return count
 }
 
-func numCurrentSessions(db *sql.DB) (int, error) {
+func numActiveSessions(db *sql.DB) (int, error) {
 	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
 	if err != nil {
-		log.Printf("Current sessions failed with error: %s\n", err)
+		log.Printf("Finding number of active sessions failed with error: %s\n", err)
 		return 0, err
 	}
 
@@ -263,7 +263,7 @@ func numCurrentSessions(db *sql.DB) (int, error) {
 }
 
 func RemindCurrentSessions(db *sql.DB) {
-	n, err := numCurrentSessions(db)
+	n, err := numActiveSessions(db)
 	if err != nil {
 		log.Printf("Getting number of current sessions failed with error: %s", err)
 		return
