@@ -649,6 +649,7 @@ func buildPages(db *sql.DB) []Page {
 		page.fetchSessions(db)
 		page.buildComponents()
 	}
+
 	return pages
 }
 
