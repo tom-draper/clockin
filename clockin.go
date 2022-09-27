@@ -35,7 +35,6 @@ func checkValidTime(time string) bool {
 func main() {
 	db, err := OpenDatabase()
 	if err != nil {
-		log.Printf("Opening database failed with error: %s\n", err)
 		return
 	}
 
@@ -48,7 +47,7 @@ func main() {
 			log.Printf("Start recording failed with error: %s\n", err)
 			return
 		}
-		RemindCurrentSessions(db, 1)
+		RemindCurrentSessions(db)
 	case "finish", "finished", "end", "stop", "halt":
 		name := getAdditionalOption()
 		err := FinishRecording(db, name)
@@ -56,7 +55,7 @@ func main() {
 			log.Printf("Finish recording failed with error: %s\n", err)
 			return
 		}
-		RemindCurrentSessions(db, 0)
+		RemindCurrentSessions(db)
 	case "reset":
 		err := Reset(db)
 		if err != nil {
@@ -80,7 +79,8 @@ func main() {
 			log.Printf("Display stats failed with error: %s\n", err)
 			return
 		}
+	case "show":
+		ShowTable(db)
 	}
 
-	ShowTable(db)
 }

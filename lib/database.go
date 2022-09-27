@@ -19,18 +19,15 @@ const (
 )
 
 func getDBLoginDetails() (string, string, bool) {
-	err := godotenv.Load(".env")
-	if err != nil {
-		fmt.Println(color.Ize(color.Red, "Error loading variables from .env file"))
-	}
+	godotenv.Load(".env")
 	fromEnv := true
 	username := os.Getenv("MYSQL_USERNAME")
 	password := os.Getenv("MYSQL_PASSWORD")
 	if username == "" || password == "" {
 		fmt.Println(color.Ize(color.Yellow, "MySQL login details required"))
-		fmt.Printf("Enter username: ")
+		fmt.Printf("Username: ")
 		fmt.Scanln(&username)
-		fmt.Printf("Enter password: ")
+		fmt.Printf("Password: ")
 		fmt.Scanln(&password)
 		fromEnv = false
 	}
@@ -60,6 +57,11 @@ func Status(db *sql.DB) error {
 	if len(sessions) == 0 {
 		fmt.Println(color.Ize(color.Green, "No sessions currently running"))
 	} else {
+		if len(sessions) == 1 {
+			fmt.Printf(color.Ize(color.Green, "%d session running\n"), len(sessions))
+		} else {
+			fmt.Printf(color.Ize(color.Green, "%d sessions running:\n"), len(sessions))
+		}
 		for _, session := range sessions {
 			printCurrentSession(session)
 		}
@@ -91,7 +93,7 @@ func dbConnection(username string, password string) (*sql.DB, error) {
 	defer cancelfunc()
 	_, err = db.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS "+dbname)
 	if err != nil {
-		log.Printf("Error when creating database: %s\n", err)
+		fmt.Println(color.Ize(color.Red, "Error: Login details invalid"))
 		return nil, err
 	}
 
@@ -207,7 +209,7 @@ func FinishRecording(db *sql.DB, name string) error {
 
 	if name == "" {
 		if n == 0 {
-			fmt.Printf(color.Ize(color.Red, "Error: No sessions running\n"), n)
+			fmt.Println(color.Ize(color.Red, "No sessions running"))
 		} else if n > 1 {
 			fmt.Printf(color.Ize(color.Green, "Stopped recording for %d sessions\n"), n)
 		} else {
@@ -215,7 +217,7 @@ func FinishRecording(db *sql.DB, name string) error {
 		}
 	} else {
 		if n == 0 {
-			fmt.Printf(color.Ize(color.Red, "Error: Name '%s' does not exist\n"), name)
+			fmt.Printf(color.Ize(color.Red, "Name '%s' does not exist\n"), name)
 		} else if n > 1 {
 			fmt.Printf(color.Ize(color.Green, "Stopped recording for %d sessions named '%s'\n"), n, name)
 		} else {
@@ -261,17 +263,14 @@ func NumActiveSessions(db *sql.DB) (int, error) {
 	return count, nil
 }
 
-func RemindCurrentSessions(db *sql.DB, numIgnore int) {
+func RemindCurrentSessions(db *sql.DB) {
 	n, err := NumActiveSessions(db)
 	if err != nil {
 		log.Printf("Getting number of current sessions failed with error: %s", err)
 		return
 	}
-	n -= numIgnore
-	if n == 1 {
-		fmt.Println(color.Ize(color.Yellow, "Reminder: Session currently running"))
-	} else if n > 1 {
-		fmt.Printf(color.Ize(color.Yellow, "Reminder: %d sessions currently running"), n-1)
+	if n > 1 {
+		fmt.Printf(color.Ize(color.Yellow, "Reminder: %d sessions currently running\n"), n)
 	}
 }
 
@@ -291,12 +290,11 @@ func OpenDatabase() (*sql.DB, error) {
 
 	db, err := dbConnection(username, password)
 	if err != nil {
-		log.Printf("Error when getting database connection: %s\n", err)
 		return nil, err
 	}
 
 	if !fromEnv {
-		fmt.Println("Login successful")
+		fmt.Println(color.Ize(color.Green, "Login successful\n"))
 		// Save details to .env file (overwrite any existing)
 		f, err := os.Create("./.env")
 		Check(err)
