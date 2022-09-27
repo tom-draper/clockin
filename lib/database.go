@@ -34,12 +34,14 @@ func getDBLoginDetails() (string, string, bool) {
 
 	return username, password, fromEnv
 }
+func formatDuration(duration time.Duration) string {
+	return durafmt.Parse(duration).LimitFirstN(2).String()
+}
 
 func printCurrentSession(session Session) {
-	now, err := time.Parse("2006-01-02 15:04:05", time.Now().Format("2006-01-02 15:04:05"))
-	Check(err)
+	now := CurrentTime()
 	duration := now.Sub(session.Start)
-	durationStr := color.Ize(color.Green, durafmt.Parse(duration).LimitFirstN(2).String())
+	durationStr := color.Ize(color.Green, formatDuration(duration))
 
 	if session.Name == "" {
 		fmt.Printf("[%d] running for %s\n", session.ID, durationStr)
@@ -173,7 +175,37 @@ func StartRecording(db *sql.DB, name string) error {
 	return nil
 }
 
+func sessionInList(session Session, sessions []Session) bool {
+	for _, s := range sessions {
+		if s.ID == session.ID {
+			return true
+		}
+	}
+	return false
+}
+
+func getUpdatedSessions(activeBefore []Session, activeAfter []Session) []Session {
+	updatedSessions := []Session{}
+	for _, session := range activeBefore {
+		if !sessionInList(session, activeAfter) {
+			updatedSessions = append(updatedSessions, session)
+		}
+	}
+	return updatedSessions
+}
+
+func getUpdatedSession(activeBefore []Session, activeAfter []Session) Session {
+	for _, session := range activeBefore {
+		if !sessionInList(session, activeAfter) {
+			return session
+		}
+	}
+	return Session{}
+}
+
 func FinishRecording(db *sql.DB, name string) error {
+	activeSessionsBefore, err := currentSessions(db)
+
 	var query string
 	if name == "" {
 		query = "UPDATE clockin set finish=NOW() WHERE finish is NULL"
@@ -207,21 +239,34 @@ func FinishRecording(db *sql.DB, name string) error {
 		return err
 	}
 
+	now := CurrentTime()
 	if name == "" {
 		if n == 0 {
 			fmt.Println(color.Ize(color.Red, "No sessions running"))
 		} else if n > 1 {
 			fmt.Printf(color.Ize(color.Green, "Stopped recording for %d sessions\n"), n)
 		} else {
-			fmt.Println(color.Ize(color.Green, "Stopped recording"))
+			activeSessionsAfter, err := currentSessions(db)
+			Check(err)
+			updated := getUpdatedSession(activeSessionsBefore, activeSessionsAfter)
+			updated.Finish = now
+			duration := calcDuration(updated)
+			fmt.Printf(color.Ize(color.Green, "Stopped recording (%s)\n"), formatDuration(duration))
 		}
 	} else {
 		if n == 0 {
 			fmt.Printf(color.Ize(color.Red, "Name '%s' does not exist\n"), name)
 		} else if n > 1 {
-			fmt.Printf(color.Ize(color.Green, "Stopped recording for %d sessions named '%s'\n"), n, name)
+			fmt.Printf(color.Ize(color.Green, "Stopped recording for %d sessions named '%s'\n"),
+				n, name)
 		} else {
-			fmt.Printf(color.Ize(color.Green, "Stopped recording for '%s'\n"), name)
+			activeSessionsAfter, err := currentSessions(db)
+			Check(err)
+			updated := getUpdatedSession(activeSessionsBefore, activeSessionsAfter)
+			updated.Finish = now
+			duration := calcDuration(updated)
+			fmt.Printf(color.Ize(color.Green, "Stopped recording for '%s' (%s)\n"),
+				name, formatDuration(duration))
 		}
 	}
 	return nil
@@ -252,6 +297,18 @@ func rowCount(rows *sql.Rows) int {
 	return count
 }
 
+func getSession(db *sql.DB, sessionID int) Session {
+	var session Session
+	err := db.QueryRow("SELECT * FROM clockin WHERE is=?").Scan(&session)
+	if err != nil {
+		return Session{}
+	}
+
+	fmt.Println(session)
+
+	return session
+}
+
 func NumActiveSessions(db *sql.DB) (int, error) {
 	rows, err := db.Query("SELECT * FROM clockin WHERE finish IS NULL")
 	if err != nil {
@@ -266,7 +323,7 @@ func NumActiveSessions(db *sql.DB) (int, error) {
 func RemindCurrentSessions(db *sql.DB) {
 	n, err := NumActiveSessions(db)
 	if err != nil {
-		log.Printf("Getting number of current sessions failed with error: %s", err)
+		log.Printf("Getting number of current sessions failed with error: %s\n", err)
 		return
 	}
 	if n > 1 {

@@ -18,11 +18,15 @@ func roundFloat(val float64, precision uint) float64 {
 	return math.Round(val*ratio) / ratio
 }
 
+func calcDuration(session Session) time.Duration {
+	return session.Finish.Sub(session.Start)
+}
+
 func totalDuration(sessions []Session) time.Duration {
 	var totalDuration time.Duration
 	for _, session := range sessions {
 		if !session.Finish.IsZero() {
-			duration := session.Finish.Sub(session.Start)
+			duration := calcDuration(session)
 			totalDuration += duration
 		}
 	}
