@@ -10,7 +10,6 @@ import (
 
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
-	"github.com/hako/durafmt"
 )
 
 func roundFloat(val float64, precision uint) float64 {
@@ -115,7 +114,7 @@ func basicInfo(sessions []Session) (*widgets.Paragraph, *widgets.Paragraph,
 	duration := totalDuration(sessions)
 	p.TextStyle = ui.NewStyle(ui.ColorGreen)
 	p.Title = "Total duration"
-	p.Text = durafmt.Parse(duration).LimitFirstN(3).String()
+	p.Text = formatDuration(duration, 3)
 	p.PaddingLeft = 2
 	p.SetRect(0, 4, 61, 7)
 
@@ -236,7 +235,7 @@ func sessionsList(sessions []Session) *widgets.List {
 		}
 		duration := totalDuration(sessions)
 		rows = append(rows, fmt.Sprintf("[%d] %s - %s", session.ID, name,
-			durafmt.Parse(duration).LimitFirstN(3).String()))
+			formatDuration(duration, 3)))
 	}
 	l.Rows = rows
 	l.PaddingLeft = 2
@@ -414,10 +413,10 @@ func (y *Year) buildComponents() {
 func (a All) scroll(direction string) {
 	if a.list != nil {
 		if direction == "up" {
-			a.list.ScrollPageUp()
+			a.list.ScrollUp()
 			ui.Render(a.list)
 		} else if direction == "down" {
-			a.list.ScrollPageDown()
+			a.list.ScrollDown()
 			ui.Render(a.list)
 		}
 	}
@@ -626,7 +625,6 @@ func DisplayStats(db *sql.DB, period string) error {
 				pages[tabpane.ActiveTabIndex].scroll("down")
 			}
 		case "k", "<Up>":
-			fmt.Println("up")
 			if tabpane.ActiveTabIndex == 1 || tabpane.ActiveTabIndex == 2 {
 				pages[tabpane.ActiveTabIndex].scroll("up")
 			}

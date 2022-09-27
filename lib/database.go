@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/TwiN/go-color"
-	"github.com/hako/durafmt"
 	"github.com/joho/godotenv"
 )
 
@@ -34,14 +33,10 @@ func getDBLoginDetails() (string, string, bool) {
 
 	return username, password, fromEnv
 }
-func formatDuration(duration time.Duration) string {
-	return durafmt.Parse(duration).LimitFirstN(2).String()
-}
-
 func printCurrentSession(session Session) {
 	now := CurrentTime()
 	duration := now.Sub(session.Start)
-	durationStr := color.Ize(color.Green, formatDuration(duration))
+	durationStr := color.Ize(color.Green, formatDuration(duration, 2))
 
 	if session.Name == "" {
 		fmt.Printf("[%d] running for %s\n", session.ID, durationStr)
@@ -205,6 +200,7 @@ func getUpdatedSession(activeBefore []Session, activeAfter []Session) Session {
 
 func FinishRecording(db *sql.DB, name string) error {
 	activeSessionsBefore, err := currentSessions(db)
+	Check(err)
 
 	var query string
 	if name == "" {
@@ -251,7 +247,7 @@ func FinishRecording(db *sql.DB, name string) error {
 			updated := getUpdatedSession(activeSessionsBefore, activeSessionsAfter)
 			updated.Finish = now
 			duration := calcDuration(updated)
-			fmt.Printf(color.Ize(color.Green, "Stopped recording (%s)\n"), formatDuration(duration))
+			fmt.Printf(color.Ize(color.Green, "Stopped recording (%s)\n"), formatDuration(duration, 2))
 		}
 	} else {
 		if n == 0 {
@@ -266,7 +262,7 @@ func FinishRecording(db *sql.DB, name string) error {
 			updated.Finish = now
 			duration := calcDuration(updated)
 			fmt.Printf(color.Ize(color.Green, "Stopped recording for '%s' (%s)\n"),
-				name, formatDuration(duration))
+				name, formatDuration(duration, 2))
 		}
 	}
 	return nil
