@@ -8,7 +8,7 @@ A command-line tool for tracking your working periods. Start and stop the timer 
 
 ### Install Dependencies
 
-A local <a href="https://dev.mysql.com/downloads/mysql/">MySQL</a> server is used by clockin to store session data on your machine. During setup, ensure you make note of your MySQL username and password and copy them into the .env file or enter them straight into the command line during the first run of the program.
+A local <a href="https://dev.mysql.com/downloads/mysql/">MySQL</a> server is required by clockin to store session data on your machine. During setup, ensure you make note of your MySQL username and password and copy them into the .env file or enter them straight into the command line during the first run of the program.
 
 Download Go dependencies with:
 
