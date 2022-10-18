@@ -8,7 +8,7 @@ A command-line tool for tracking your working periods. Start and stop the timer 
 
 ### Install Dependencies
 
-<a href="https://dev.mysql.com/downloads/mysql/">MySQL</a> is used by clockin to store timings data locally on your machine. During setup, ensure you make note of your username and password and copy them into the .env file or enter them straight into the command line during the first run of the program.
+A local <a href="https://dev.mysql.com/downloads/mysql/">MySQL</a> server is used by clockin to store session data on your machine. During setup, ensure you make note of your MySQL username and password and copy them into the .env file or enter them straight into the command line during the first run of the program.
 
 Download Go dependencies with:
 
@@ -79,7 +79,7 @@ A statistical summary of how you've spent your time working can be displayed by 
 ```bash
 clockin stats
 ```
-
+<!---
 ### Config
 
 config.json contains configurable settings that affect the way clockin works.
@@ -91,3 +91,4 @@ An integer upper limit on the number of hours that can be considered a single wo
 #### discardOnTimeout
 
 A boolean value on whether a work session is discarded if the timeout limit is reached. Defaults to false.
+-->
