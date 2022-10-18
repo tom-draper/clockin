@@ -2,13 +2,13 @@
 	<img width="550px" src="https://user-images.githubusercontent.com/41476809/192119791-831cec36-dab0-4cb0-afc1-1ba12389475f.png">
 </p>
 
-A command-line tool that lets you to track your working periods. Start and stop the timer with two simple commands and view stats and trends and earn awards for good behaviour!.
+A command-line tool for tracking your working periods. Start and stop the timer with two simple commands, and then open the built-in statistical summary to identify patterns and trends!
 
 ## Getting Started
 
 ### Install Dependencies
 
-<a href="https://dev.mysql.com/downloads/mysql/">MySQL</a> is used by clockin to store timings data locally on your machine. During setup, ensure you make note of your username and password and copy them into the .env file or enter them straight into the command line during your first run of the program.
+<a href="https://dev.mysql.com/downloads/mysql/">MySQL</a> is used by clockin to store timings data locally on your machine. During setup, ensure you make note of your username and password and copy them into the .env file or enter them straight into the command line during the first run of the program.
 
 Download Go dependencies with:
 
@@ -24,7 +24,7 @@ Compile the program on your machine with:
 go build clockin.go
 ```
 
-To make the executable runnable from anywhere, add the directory to your PATH environment variable.
+To make the executable runnable from anywhere, add the directory as a PATH environment variable.
 
 ## How to Use
 
