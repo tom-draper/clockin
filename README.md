@@ -1,5 +1,5 @@
 <p align="center">
-	<img width="550px" src="https://user-images.githubusercontent.com/41476809/201164605-d7d666e1-a9fa-4cf9-abc0-f3c4f3d57a48.png">
+	<img width="550px" src="https://user-images.githubusercontent.com/41476809/192119791-831cec36-dab0-4cb0-afc1-1ba12389475f">
 </p>
 
 A command-line tool for tracking your working periods. Start and stop the timer with two simple commands, and then open the built-in statistical summary to identify patterns and trends!
